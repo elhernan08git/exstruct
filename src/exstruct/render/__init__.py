@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import multiprocessing as mp
 import os
 from pathlib import Path
@@ -16,6 +17,8 @@ from ..errors import MissingDependencyError, RenderError
 
 logger = logging.getLogger(__name__)
 _A1_RANGE_PATTERN = re.compile(r"^[A-Za-z]{1,3}[1-9][0-9]*:[A-Za-z]{1,3}[1-9][0-9]*$")
+_DEFAULT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SECONDS = 120.0
+_DEFAULT_RENDER_SUBPROCESS_RESULT_TIMEOUT_SECONDS = 5.0
 
 
 def _require_excel_app() -> xw.App:
@@ -185,6 +188,22 @@ class _SheetApiProtocol(Protocol):
             **kwargs (object): Additional keyword arguments forwarded to the underlying Excel COM ExportAsFixedFormat call.
         """
         ...
+
+
+class _SubprocessProtocol(Protocol):
+    """Protocol for subprocess control methods used in rendering."""
+
+    def join(self, timeout: float | None = None) -> None:
+        """Wait for the subprocess to finish."""
+
+    def is_alive(self) -> bool:
+        """Return True if the subprocess is still running."""
+
+    def terminate(self) -> None:
+        """Request graceful subprocess termination."""
+
+    def kill(self) -> None:
+        """Force kill the subprocess."""
 
 
 def _iter_sheet_apis(wb: xw.Book) -> list[tuple[int, str, _SheetApiProtocol]]:
@@ -611,6 +630,56 @@ def _use_render_subprocess() -> bool:
     return os.getenv("EXSTRUCT_RENDER_SUBPROCESS", "1").lower() not in {"0", "false"}
 
 
+def _get_render_subprocess_join_timeout_seconds() -> float:
+    """Read and validate subprocess join timeout from environment."""
+    return _get_positive_timeout_seconds(
+        "EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC",
+        _DEFAULT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SECONDS,
+    )
+
+
+def _get_render_subprocess_result_timeout_seconds() -> float:
+    """Read and validate subprocess result timeout from environment."""
+    return _get_positive_timeout_seconds(
+        "EXSTRUCT_RENDER_SUBPROCESS_RESULT_TIMEOUT_SEC",
+        _DEFAULT_RENDER_SUBPROCESS_RESULT_TIMEOUT_SECONDS,
+    )
+
+
+def _get_positive_timeout_seconds(env_name: str, default_value: float) -> float:
+    """Read a positive timeout (seconds) from environment or return default."""
+    raw_value = os.getenv(env_name)
+    if raw_value is None:
+        return default_value
+    try:
+        parsed = float(raw_value)
+    except ValueError:
+        logger.warning(
+            "Invalid %s=%r. Falling back to %.1fs.",
+            env_name,
+            raw_value,
+            default_value,
+        )
+        return default_value
+    if not math.isfinite(parsed):
+        logger.warning(
+            "Non-finite %s=%r. Falling back to %.1fs.",
+            env_name,
+            raw_value,
+            default_value,
+        )
+        return default_value
+    if parsed <= 0:
+        logger.warning(
+            "Non-positive %s=%r. Falling back to %.1fs.",
+            env_name,
+            raw_value,
+            default_value,
+        )
+        return default_value
+    return parsed
+
+
 def _render_pdf_pages_in_process(
     pdfium: ModuleType,
     pdf_path: Path,
@@ -650,9 +719,17 @@ def _render_pdf_pages_subprocess(
         target=_render_pdf_pages_worker,
         args=(pdf_path, output_dir, sheet_index, safe_name, dpi, queue),
     )
+    join_timeout_seconds = _get_render_subprocess_join_timeout_seconds()
+    result_timeout_seconds = _get_render_subprocess_result_timeout_seconds()
     process.start()
-    process.join()
-    result = _get_subprocess_result(queue)
+    process.join(timeout=join_timeout_seconds)
+    if process.is_alive():
+        _terminate_subprocess(process)
+        raise RenderError(
+            "Failed to render PDF pages: subprocess timed out "
+            f"after {join_timeout_seconds:.1f}s."
+        )
+    result = _get_subprocess_result(queue, timeout_seconds=result_timeout_seconds)
     if process.exitcode != 0 or "error" in result:
         message = result.get("error", "subprocess failed")
         raise RenderError(f"Failed to render PDF pages: {message}")
@@ -660,12 +737,25 @@ def _render_pdf_pages_subprocess(
     return [Path(path) for path in paths]
 
 
+def _terminate_subprocess(process: _SubprocessProtocol) -> None:
+    """Terminate a hung subprocess and wait briefly for shutdown."""
+    process.terminate()
+    process.join(timeout=2.0)
+    if process.is_alive():
+        kill_method = getattr(process, "kill", None)
+        if callable(kill_method):
+            kill_method()
+            process.join(timeout=1.0)
+
+
 def _get_subprocess_result(
     queue: mp.Queue[dict[str, list[str] | str]],
+    *,
+    timeout_seconds: float = _DEFAULT_RENDER_SUBPROCESS_RESULT_TIMEOUT_SECONDS,
 ) -> dict[str, list[str] | str]:
     """Fetch the worker result from the queue with a timeout."""
     try:
-        return queue.get(timeout=5)
+        return queue.get(timeout=timeout_seconds)
     except Exception as exc:
         return {"error": f"subprocess did not return results ({exc})"}
 

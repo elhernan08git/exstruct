@@ -39,3 +39,32 @@
 - Follow-ups:
   - 必要であれば `sheet` 名の大小無視比較オプションを検討する。
   - 将来的に `copyPicture` 以外の軽量レンダリング経路を比較評価する。
+
+## Timeout Hardening (2026-02-28)
+
+- [x] Add subprocess join timeout + terminate/kill fallback in `src/exstruct/render/__init__.py`.
+- [x] Add MCP-side timeout guard for `exstruct_capture_sheet_images` in `src/exstruct/mcp/server.py`.
+- [x] Update/extend tests in `tests/render/test_render_init.py` and `tests/mcp/test_server.py`.
+
+## Timeout Hardening Review
+
+- Summary:
+  - Added bounded wait for render subprocess and forced shutdown when join timeout is exceeded.
+  - Added tool-level timeout in MCP capture handler with explicit timeout error message.
+- Verification:
+  - `uv run pytest tests/render/test_render_init.py tests/mcp/test_server.py -q`
+  - `uv run task precommit-run`
+
+## Follow-up Fix (non-finite timeout env) 2026-02-28
+
+- [x] Reject non-finite timeout env values in `src/exstruct/render/__init__.py`.
+- [x] Reject non-finite timeout env values in `src/exstruct/mcp/server.py`.
+- [x] Extend tests in `tests/render/test_render_init.py` and `tests/mcp/test_server.py` for `NaN/inf/-inf`.
+
+## Follow-up Fix Review
+
+- Summary:
+  - Added `math.isfinite(...)` checks so non-finite timeout env values fallback to defaults.
+  - Closed both review findings for render and MCP timeout readers.
+- Verification:
+  - `uv run pytest tests/render/test_render_init.py tests/mcp/test_server.py -q`

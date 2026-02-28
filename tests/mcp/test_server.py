@@ -101,6 +101,28 @@ def test_parse_args_with_options(tmp_path: Path) -> None:
     assert config.warmup is True
 
 
+def test_get_capture_sheet_images_timeout_seconds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("EXSTRUCT_MCP_CAPTURE_SHEET_IMAGES_TIMEOUT_SEC", raising=False)
+    assert server._get_capture_sheet_images_timeout_seconds() == 120.0
+
+    monkeypatch.setenv("EXSTRUCT_MCP_CAPTURE_SHEET_IMAGES_TIMEOUT_SEC", "45")
+    assert server._get_capture_sheet_images_timeout_seconds() == 45.0
+
+    monkeypatch.setenv("EXSTRUCT_MCP_CAPTURE_SHEET_IMAGES_TIMEOUT_SEC", "0")
+    assert server._get_capture_sheet_images_timeout_seconds() == 120.0
+
+    monkeypatch.setenv("EXSTRUCT_MCP_CAPTURE_SHEET_IMAGES_TIMEOUT_SEC", "NaN")
+    assert server._get_capture_sheet_images_timeout_seconds() == 120.0
+
+    monkeypatch.setenv("EXSTRUCT_MCP_CAPTURE_SHEET_IMAGES_TIMEOUT_SEC", "inf")
+    assert server._get_capture_sheet_images_timeout_seconds() == 120.0
+
+    monkeypatch.setenv("EXSTRUCT_MCP_CAPTURE_SHEET_IMAGES_TIMEOUT_SEC", "-inf")
+    assert server._get_capture_sheet_images_timeout_seconds() == 120.0
+
+
 def test_import_mcp_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     def _raise(_: str) -> None:
         raise ModuleNotFoundError("mcp")
@@ -392,7 +414,14 @@ def test_register_tools_passes_capture_sheet_images_arguments(
             image_paths=[str(tmp_path / "book_images" / "01_Sheet1.png")],
         )
 
-    async def fake_run_sync(func: Callable[[], object]) -> object:
+    run_sync_args: dict[str, object] = {}
+
+    async def fake_run_sync(
+        func: Callable[[], object],
+        *,
+        abandon_on_cancel: bool = False,
+    ) -> object:
+        run_sync_args["abandon_on_cancel"] = abandon_on_cancel
         return func()
 
     monkeypatch.setattr(
@@ -429,7 +458,51 @@ def test_register_tools_passes_capture_sheet_images_arguments(
     assert capture_call[0].dpi == 200
     assert capture_call[0].sheet == "Sheet 1"
     assert capture_call[0].range == "A1:B2"
+    assert run_sync_args["abandon_on_cancel"] is True
     assert result.image_paths == [str(tmp_path / "book_images" / "01_Sheet1.png")]
+
+
+def test_register_tools_capture_sheet_images_timeout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    app = DummyApp()
+    policy = PathPolicy(root=tmp_path)
+
+    def fake_run_capture_sheet_images_tool(
+        payload: CaptureSheetImagesToolInput,
+        *,
+        policy: PathPolicy,
+    ) -> CaptureSheetImagesToolOutput:
+        _ = payload
+        _ = policy
+        return CaptureSheetImagesToolOutput(out_dir=str(tmp_path), image_paths=[])
+
+    async def fake_run_sync(
+        func: Callable[[], object],
+        *,
+        abandon_on_cancel: bool = False,
+    ) -> object:
+        _ = func
+        _ = abandon_on_cancel
+        raise TimeoutError("tool timed out")
+
+    monkeypatch.setattr(
+        server,
+        "run_capture_sheet_images_tool",
+        fake_run_capture_sheet_images_tool,
+    )
+    monkeypatch.setattr(anyio.to_thread, "run_sync", fake_run_sync)
+    monkeypatch.setattr(
+        server, "_get_capture_sheet_images_timeout_seconds", lambda: 3.0
+    )
+
+    server._register_tools(app, policy, default_on_conflict="overwrite")
+    capture_tool = cast(
+        Callable[..., Awaitable[object]],
+        app.tools["exstruct_capture_sheet_images"],
+    )
+    with pytest.raises(TimeoutError, match="capture_sheet_images timed out after 3.0s"):
+        anyio.run(_call_async, capture_tool, {"xlsx_path": "book.xlsx"})
 
 
 def test_register_tools_returns_ops_schema_tools(tmp_path: Path) -> None:

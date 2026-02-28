@@ -474,20 +474,32 @@ class FakeProcess:
     def __init__(
         self,
         queue: FakeQueue,
-        exitcode: int,
+        exitcode: int | None,
         payload: dict[str, list[str] | str] | None = None,
+        *,
+        alive_after_join: bool = False,
     ) -> None:
         self._queue = queue
         self.exitcode = exitcode
+        self._alive_after_join = alive_after_join
+        self.terminate_called = False
+        self.join_calls: list[float | None] = []
         if payload is not None:
             self._queue.put(payload)
 
     def start(self) -> None:
-        if self._queue.payload is None:
-            self._queue.put({"paths": ["dummy"]})
-
-    def join(self) -> None:
         return None
+
+    def join(self, timeout: float | None = None) -> None:
+        self.join_calls.append(timeout)
+        return None
+
+    def is_alive(self) -> bool:
+        return self._alive_after_join
+
+    def terminate(self) -> None:
+        self.terminate_called = True
+        self._alive_after_join = False
 
 
 class FakeContext:
@@ -560,6 +572,57 @@ def test_get_subprocess_result_timeout() -> None:
 
     error = cast(str, result["error"])
     assert error.startswith("subprocess did not return results")
+
+
+def test_render_pdf_pages_subprocess_join_timeout(tmp_path: Path) -> None:
+    """_render_pdf_pages_subprocess terminates a hung worker on join timeout."""
+    queue = FakeQueue()
+    process = FakeProcess(queue, exitcode=None, alive_after_join=True)
+    context = FakeContext(queue, process)
+    render_mp = cast(Any, render).mp
+
+    def _get_context(_: str) -> FakeContext:
+        return context
+
+    pdf_path = tmp_path / "sheet_01.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4")
+    output_dir = tmp_path / "images"
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(render_mp, "get_context", _get_context)
+        monkeypatch.setattr(
+            render,
+            "_get_render_subprocess_join_timeout_seconds",
+            lambda: 0.1,
+        )
+        with pytest.raises(RenderError, match="subprocess timed out"):
+            render._render_pdf_pages_subprocess(pdf_path, output_dir, 0, "Sheet1", 144)
+
+    assert process.terminate_called is True
+    assert process.join_calls[0] == 0.1
+
+
+def test_get_render_subprocess_join_timeout_seconds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_get_render_subprocess_join_timeout_seconds validates env values."""
+    monkeypatch.delenv("EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC", raising=False)
+    assert render._get_render_subprocess_join_timeout_seconds() == 120.0
+
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC", "30")
+    assert render._get_render_subprocess_join_timeout_seconds() == 30.0
+
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC", "0")
+    assert render._get_render_subprocess_join_timeout_seconds() == 120.0
+
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC", "NaN")
+    assert render._get_render_subprocess_join_timeout_seconds() == 120.0
+
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC", "inf")
+    assert render._get_render_subprocess_join_timeout_seconds() == 120.0
+
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC", "-inf")
+    assert render._get_render_subprocess_join_timeout_seconds() == 120.0
 
 
 def test_render_pdf_pages_worker_success(tmp_path: Path) -> None:
