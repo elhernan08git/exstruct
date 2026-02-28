@@ -90,6 +90,10 @@ exstruct-mcp --root C:\\data --log-file C:\\logs\\exstruct-mcp.log --on-conflict
 - Notes:
   - If `out_dir` is omitted, a unique `<workbook_stem>_images` directory is created under MCP `--root`.
   - COM/Excel desktop is required.
+  - Timeout tuning:
+    - `EXSTRUCT_MCP_CAPTURE_SHEET_IMAGES_TIMEOUT_SEC` (default `120`)
+    - `EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC` (default `120`)
+    - `EXSTRUCT_RENDER_SUBPROCESS_RESULT_TIMEOUT_SEC` (default `5`)
 
 Example:
 
