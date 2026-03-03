@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. This changelog 
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-03-03
+
 ### Added
 
 - Added a dedicated render worker entrypoint (`python -m exstruct.render.subprocess_worker`) for `capture_sheet_images` subprocess mode, decoupled from parent `__main__` restoration.
