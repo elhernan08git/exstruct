@@ -547,6 +547,47 @@ def test_register_tools_capture_sheet_images_propagates_runner_error(
         anyio.run(_call_async, capture_tool, {"xlsx_path": "book.xlsx"})
 
 
+def test_register_tools_capture_sheet_images_propagates_stage_aware_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    app = DummyApp()
+    policy = PathPolicy(root=tmp_path)
+
+    def fake_run_capture_sheet_images_tool(
+        payload: CaptureSheetImagesToolInput,
+        *,
+        policy: PathPolicy,
+    ) -> CaptureSheetImagesToolOutput:
+        _ = payload
+        _ = policy
+        raise ValueError(
+            "Failed to render PDF pages: stage=startup worker exited before initialization."
+        )
+
+    async def fake_run_sync(
+        func: Callable[[], object],
+        *,
+        abandon_on_cancel: bool = False,
+    ) -> object:
+        _ = abandon_on_cancel
+        return func()
+
+    monkeypatch.setattr(
+        server,
+        "run_capture_sheet_images_tool",
+        fake_run_capture_sheet_images_tool,
+    )
+    monkeypatch.setattr(anyio.to_thread, "run_sync", fake_run_sync)
+
+    server._register_tools(app, policy, default_on_conflict="overwrite")
+    capture_tool = cast(
+        Callable[..., Awaitable[object]],
+        app.tools["exstruct_capture_sheet_images"],
+    )
+    with pytest.raises(ValueError, match="stage=startup"):
+        anyio.run(_call_async, capture_tool, {"xlsx_path": "book.xlsx"})
+
+
 def test_register_tools_returns_ops_schema_tools(tmp_path: Path) -> None:
     app = DummyApp()
     policy = PathPolicy(root=tmp_path)
@@ -1365,7 +1406,7 @@ def test_run_server_sets_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     assert created["on_conflict"] == "overwrite"
     assert created["artifact_bridge_dir"] is None
     assert os.getenv("EXSTRUCT_BORDER_CLUSTER_BACKEND") == "python"
-    assert os.getenv("EXSTRUCT_RENDER_SUBPROCESS") == "0"
+    assert os.getenv("EXSTRUCT_RENDER_SUBPROCESS") == "1"
 
 
 def test_run_server_preserves_existing_render_subprocess_env(
@@ -1392,7 +1433,7 @@ def test_run_server_preserves_existing_render_subprocess_env(
         created["artifact_bridge_dir"] = artifact_bridge_dir
         return _App()
 
-    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS", "1")
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS", "0")
     monkeypatch.setattr(server, "_import_mcp", fake_import)
     monkeypatch.setattr(server, "_create_app", fake_create_app)
     config = server.ServerConfig(root=tmp_path)
@@ -1400,7 +1441,7 @@ def test_run_server_preserves_existing_render_subprocess_env(
     server.run_server(config)
 
     assert created["ran"] is True
-    assert os.getenv("EXSTRUCT_RENDER_SUBPROCESS") == "1"
+    assert os.getenv("EXSTRUCT_RENDER_SUBPROCESS") == "0"
 
 
 def test_configure_logging_with_file(

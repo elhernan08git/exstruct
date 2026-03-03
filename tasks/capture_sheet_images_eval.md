@@ -7,8 +7,10 @@ Define a repeatable evaluation set and procedure for MCP `exstruct_capture_sheet
 ## Runtime Baseline
 
 - OS: Windows (Excel desktop available)
-- MCP runtime defaults:
-  - `EXSTRUCT_RENDER_SUBPROCESS=0`
+- Evaluate both runtime profiles:
+  - Profile A (current MCP default): `EXSTRUCT_RENDER_SUBPROCESS=1`
+  - Profile B (in-process fallback): `EXSTRUCT_RENDER_SUBPROCESS=0`
+- Common timeout:
   - `EXSTRUCT_MCP_CAPTURE_SHEET_IMAGES_TIMEOUT_SEC=180`
 
 ## Representative Workbook Set
@@ -29,24 +31,33 @@ For each workbook, run all applicable cases:
 
 1. Full workbook export (`sheet`/`range` omitted)
 2. Single sheet export (`sheet` only)
-3. Minimal range export (`sheet` + `range=A1:A1`)
+3. Minimal non-empty range export (`sheet` + `range=<one-cell non-empty address>`)
 4. Sheet-qualified range export (`'Sheet Name'!A1:B2` when sheet name contains spaces)
+
+Notes:
+- Do not fix the minimal range to `A1:A1`; some workbooks can trigger Excel modal dialogs in unattended runs.
+- For case 3, choose a one-cell range that is confirmed non-empty from the target sheet.
 
 ## Procedure
 
-1. Start MCP server with production-like env.
-2. For each case, call `exstruct_capture_sheet_images` and record:
+1. Start MCP server with target profile env.
+2. Determine the case-3 cell before capture:
+   - Use extraction output (or workbook inspection) and pick the first non-empty cell on the target sheet.
+3. For each case, call `exstruct_capture_sheet_images` and record:
    - start/end timestamp
    - elapsed seconds
    - success/failure
    - error message (if failed)
    - generated image count
-3. Repeat the whole matrix 3 times.
-4. Compute:
+4. Repeat the whole matrix 3 times.
+5. Compute:
    - total runs
    - success rate
    - p50/p95 elapsed time
    - failure type breakdown
+
+Unattended-run rule:
+- If Excel modal confirmation appears during a run, mark the run as invalid and re-run after adjusting the minimal range cell.
 
 ## Pass/Fail Gate (GA)
 

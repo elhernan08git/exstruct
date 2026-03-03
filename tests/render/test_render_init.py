@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import builtins
 from collections.abc import Callable
+import json
 import logging
 from pathlib import Path
 import shutil
+import subprocess
 import sys
+import threading
 from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 
@@ -286,9 +289,8 @@ def test_export_sheet_images_success(
 
     fake_pdfium = SimpleNamespace(PdfDocument=FakePdfDocument)
     monkeypatch.setattr(render, "_require_pdfium", lambda: fake_pdfium)
-    monkeypatch.setattr(
-        render, "_require_excel_app", lambda: FakeApp(["Sheet/1", "  "], False)
-    )
+    fake_app = FakeApp(["Sheet/1", "  "], False)
+    monkeypatch.setattr(render, "_require_excel_app", lambda: fake_app)
 
     written = render.export_sheet_images(xlsx, out_dir, dpi=144)
 
@@ -296,6 +298,7 @@ def test_export_sheet_images_success(
     assert written[1].name == "02_Sheet_1.png"
     assert written[2].name == "03_sheet.png"
     assert all(path.exists() for path in written)
+    assert fake_app.display_alerts is False
 
 
 def test_export_sheet_images_propagates_render_error(
@@ -450,95 +453,80 @@ def test_use_render_subprocess_env_toggle(monkeypatch: pytest.MonkeyPatch) -> No
     assert render._use_render_subprocess() is False
 
 
-class FakeQueue:
-    """Stub queue for subprocess tests."""
-
-    def __init__(self) -> None:
-        self.payload: dict[str, list[str] | str] | None = None
-
-    def put(self, payload: dict[str, list[str] | str]) -> None:
-        self.payload = payload
-
-    def get(self, timeout: float | None = None) -> dict[str, list[str] | str]:
-        _ = timeout
-        if self.payload is None:
-            raise TimeoutError("timeout")
-        return self.payload
-
-    def empty(self) -> bool:
-        return self.payload is None
-
-
-class FakeProcess:
-    """Stub process for subprocess tests."""
+class FakeWorkerProcess:
+    """Stub subprocess.Popen-like process for worker tests."""
 
     def __init__(
         self,
-        queue: FakeQueue,
-        exitcode: int | None,
-        payload: dict[str, list[str] | str] | None = None,
         *,
-        alive_after_join: bool = False,
+        returncode: int | None = None,
+        stderr: str = "",
+        wait_timeout: bool = False,
     ) -> None:
-        self._queue = queue
-        self.exitcode = exitcode
-        self._alive_after_join = alive_after_join
+        self.returncode = returncode
+        self.stderr = stderr
+        self.wait_timeout = wait_timeout
+        self.wait_calls: list[float | None] = []
         self.terminate_called = False
-        self.join_calls: list[float | None] = []
-        if payload is not None:
-            self._queue.put(payload)
+        self.kill_called = False
 
-    def start(self) -> None:
-        return None
+    def poll(self) -> int | None:
+        return self.returncode
 
-    def join(self, timeout: float | None = None) -> None:
-        self.join_calls.append(timeout)
-        return None
-
-    def is_alive(self) -> bool:
-        return self._alive_after_join
+    def wait(self, timeout: float | None = None) -> int:
+        self.wait_calls.append(timeout)
+        if self.wait_timeout:
+            raise subprocess.TimeoutExpired(cmd="worker", timeout=timeout or 0.0)
+        if self.returncode is None:
+            self.returncode = 0
+        return self.returncode
 
     def terminate(self) -> None:
         self.terminate_called = True
-        self._alive_after_join = False
+        self.returncode = 0
 
+    def kill(self) -> None:
+        self.kill_called = True
+        self.returncode = -9
 
-class FakeContext:
-    """Stub multiprocessing context for subprocess tests."""
-
-    def __init__(self, queue: FakeQueue, process: FakeProcess) -> None:
-        self._queue = queue
-        self._process = process
-
-    def Queue(self) -> FakeQueue:
-        return self._queue
-
-    def Process(self, target: object, args: tuple[object, ...]) -> FakeProcess:
-        _ = target
-        _ = args
-        return self._process
+    def communicate(
+        self,
+        timeout: float | None = None,
+    ) -> tuple[str | None, str | None]:
+        _ = timeout
+        return ("", self.stderr)
 
 
 def test_render_pdf_pages_subprocess_success(tmp_path: Path) -> None:
     """_render_pdf_pages_subprocess returns paths when worker succeeds."""
-    queue = FakeQueue()
-    process = FakeProcess(
-        queue,
-        exitcode=0,
-        payload={"paths": [str(tmp_path / "images" / "01_Sheet1.png")]},
-    )
-    context = FakeContext(queue, process)
-    render_mp = cast(Any, render).mp
+    output_dir = tmp_path / "images"
 
-    def _get_context(_: str) -> FakeContext:
-        return context
+    def _fake_runner(
+        pdf_path: Path,
+        output_dir_arg: Path,
+        sheet_index: int,
+        safe_name: str,
+        dpi: int,
+        *,
+        startup_timeout_seconds: float,
+        result_timeout_seconds: float,
+        join_timeout_seconds: float,
+    ) -> dict[str, list[str] | str]:
+        _ = pdf_path
+        _ = output_dir_arg
+        _ = sheet_index
+        _ = safe_name
+        _ = dpi
+        _ = startup_timeout_seconds
+        _ = result_timeout_seconds
+        _ = join_timeout_seconds
+        return {"paths": [str(output_dir / "01_Sheet1.png")]}
 
     pdf_path = tmp_path / "sheet_01.pdf"
     pdf_path.write_bytes(b"%PDF-1.4")
-    output_dir = tmp_path / "images"
 
     with pytest.MonkeyPatch.context() as monkeypatch:
-        monkeypatch.setattr(render_mp, "get_context", _get_context)
+        monkeypatch.setattr(render, "_run_render_worker_subprocess", _fake_runner)
         result = render._render_pdf_pages_subprocess(
             pdf_path, output_dir, 0, "Sheet1", 144
         )
@@ -551,158 +539,246 @@ def test_render_pdf_pages_subprocess_emits_stage_logs(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """_render_pdf_pages_subprocess emits start/join/done stage logs."""
-    queue = FakeQueue()
-    process = FakeProcess(
-        queue,
-        exitcode=0,
-        payload={"paths": [str(tmp_path / "images" / "01_Sheet1.png")]},
-    )
-    context = FakeContext(queue, process)
-    render_mp = cast(Any, render).mp
+    output_dir = tmp_path / "images"
 
-    def _get_context(_: str) -> FakeContext:
-        return context
+    def _fake_runner(
+        pdf_path: Path,
+        output_dir_arg: Path,
+        sheet_index: int,
+        safe_name: str,
+        dpi: int,
+        *,
+        startup_timeout_seconds: float,
+        result_timeout_seconds: float,
+        join_timeout_seconds: float,
+    ) -> dict[str, list[str] | str]:
+        _ = pdf_path
+        _ = output_dir_arg
+        _ = sheet_index
+        _ = safe_name
+        _ = dpi
+        _ = startup_timeout_seconds
+        _ = result_timeout_seconds
+        _ = join_timeout_seconds
+        return {"paths": [str(output_dir / "01_Sheet1.png")]}
 
     pdf_path = tmp_path / "sheet_01.pdf"
     pdf_path.write_bytes(b"%PDF-1.4")
-    output_dir = tmp_path / "images"
 
     with pytest.MonkeyPatch.context() as monkeypatch:
-        monkeypatch.setattr(render_mp, "get_context", _get_context)
+        monkeypatch.setattr(render, "_run_render_worker_subprocess", _fake_runner)
         caplog.set_level(logging.INFO, logger=render.__name__)
         render._render_pdf_pages_subprocess(pdf_path, output_dir, 0, "Sheet1", 144)
 
     log_text = caplog.text
     assert "render-stage=subprocess.start" in log_text
-    assert "render-stage=subprocess.joined" in log_text
     assert "render-stage=subprocess.done" in log_text
 
 
 def test_render_pdf_pages_subprocess_error(tmp_path: Path) -> None:
     """_render_pdf_pages_subprocess raises when worker reports error."""
-    queue = FakeQueue()
-    process = FakeProcess(queue, exitcode=0, payload={"error": "boom"})
-    context = FakeContext(queue, process)
-    render_mp = cast(Any, render).mp
 
-    def _get_context(_: str) -> FakeContext:
-        return context
+    def _fake_runner(
+        pdf_path: Path,
+        output_dir: Path,
+        sheet_index: int,
+        safe_name: str,
+        dpi: int,
+        *,
+        startup_timeout_seconds: float,
+        result_timeout_seconds: float,
+        join_timeout_seconds: float,
+    ) -> dict[str, list[str] | str]:
+        _ = pdf_path
+        _ = output_dir
+        _ = sheet_index
+        _ = safe_name
+        _ = dpi
+        _ = startup_timeout_seconds
+        _ = result_timeout_seconds
+        _ = join_timeout_seconds
+        return {"error": "boom"}
 
     pdf_path = tmp_path / "sheet_01.pdf"
     pdf_path.write_bytes(b"%PDF-1.4")
     output_dir = tmp_path / "images"
 
     with pytest.MonkeyPatch.context() as monkeypatch:
-        monkeypatch.setattr(render_mp, "get_context", _get_context)
-        with pytest.raises(RenderError, match="boom"):
+        monkeypatch.setattr(render, "_run_render_worker_subprocess", _fake_runner)
+        with pytest.raises(RenderError, match="stage=worker boom"):
             render._render_pdf_pages_subprocess(pdf_path, output_dir, 0, "Sheet1", 144)
 
 
-def test_get_subprocess_result_timeout() -> None:
-    """_get_subprocess_result returns an error payload on timeout."""
-    queue = FakeQueue()
-    result = render._get_subprocess_result(cast(Any, queue))
-
-    error = cast(str, result["error"])
-    assert error.startswith("subprocess did not return results")
-
-
-def test_render_pdf_pages_subprocess_join_timeout(tmp_path: Path) -> None:
-    """_render_pdf_pages_subprocess terminates a hung worker on join timeout."""
-    queue = FakeQueue()
-    process = FakeProcess(queue, exitcode=None, alive_after_join=True)
-    context = FakeContext(queue, process)
-    render_mp = cast(Any, render).mp
-
-    def _get_context(_: str) -> FakeContext:
-        return context
-
+def test_run_render_worker_subprocess_success_when_join_timeout(
+    tmp_path: Path,
+) -> None:
+    """Return success when result is received even if join wait times out."""
     pdf_path = tmp_path / "sheet_01.pdf"
     pdf_path.write_bytes(b"%PDF-1.4")
     output_dir = tmp_path / "images"
+    process = FakeWorkerProcess(returncode=None, wait_timeout=True)
 
     with pytest.MonkeyPatch.context() as monkeypatch:
-        monkeypatch.setattr(render_mp, "get_context", _get_context)
+        monkeypatch.setattr(render, "_start_render_worker_process", lambda _: process)
         monkeypatch.setattr(
             render,
-            "_get_render_subprocess_join_timeout_seconds",
-            lambda: 0.1,
+            "_wait_for_worker_startup",
+            lambda proc, *, started_path, timeout_seconds: None,
         )
-        with pytest.raises(RenderError, match="subprocess timed out"):
-            render._render_pdf_pages_subprocess(pdf_path, output_dir, 0, "Sheet1", 144)
+        monkeypatch.setattr(
+            render,
+            "_wait_for_worker_result",
+            lambda proc,
+            *,
+            result_path,
+            wait_timeout_seconds,
+            post_exit_timeout_seconds: {"paths": [str(output_dir / "01_Sheet1.png")]},
+        )
+        result = render._run_render_worker_subprocess(
+            pdf_path,
+            output_dir,
+            0,
+            "Sheet1",
+            144,
+            startup_timeout_seconds=1.0,
+            result_timeout_seconds=1.0,
+            join_timeout_seconds=0.1,
+        )
 
+    assert result["paths"] == [str(output_dir / "01_Sheet1.png")]
     assert process.terminate_called is True
-    assert process.join_calls[0] == 0.1
 
 
-def test_get_render_subprocess_join_timeout_seconds(
+def test_run_render_worker_subprocess_startup_error_is_actionable(
+    tmp_path: Path,
+) -> None:
+    """Emit startup-stage error with stderr snippet on bootstrap failure."""
+    pdf_path = tmp_path / "sheet_01.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4")
+    output_dir = tmp_path / "images"
+    process = FakeWorkerProcess(returncode=1, stderr="bootstrap failed")
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(render, "_start_render_worker_process", lambda _: process)
+        with pytest.raises(RenderError, match="stage=startup"):
+            render._run_render_worker_subprocess(
+                pdf_path,
+                output_dir,
+                0,
+                "Sheet1",
+                144,
+                startup_timeout_seconds=0.1,
+                result_timeout_seconds=0.1,
+                join_timeout_seconds=0.1,
+            )
+
+
+def test_wait_for_worker_result_timeout_has_join_stage(tmp_path: Path) -> None:
+    """Timeout while worker is still running should report join stage."""
+    process = FakeWorkerProcess(returncode=None)
+    result_path = tmp_path / "result.json"
+
+    with pytest.raises(RenderError, match="stage=join timed out"):
+        render._wait_for_worker_result(
+            process,
+            result_path=result_path,
+            wait_timeout_seconds=0.01,
+            post_exit_timeout_seconds=0.01,
+        )
+
+
+def test_wait_for_worker_result_allows_longer_than_post_exit_timeout(
+    tmp_path: Path,
+) -> None:
+    """Do not fail early while worker is alive even when post-exit timeout is short."""
+    process = FakeWorkerProcess(returncode=None)
+    result_path = tmp_path / "result.json"
+    done = threading.Event()
+
+    def _write_later() -> None:
+        done.wait(0.05)
+        result_path.write_text(
+            json.dumps({"paths": [str(tmp_path / "images" / "01_Sheet1.png")]}),
+            encoding="utf-8",
+        )
+
+    thread = threading.Thread(target=_write_later)
+    thread.start()
+    try:
+        result = render._wait_for_worker_result(
+            process,
+            result_path=result_path,
+            wait_timeout_seconds=0.20,
+            post_exit_timeout_seconds=0.01,
+        )
+    finally:
+        done.set()
+        thread.join(timeout=1.0)
+
+    assert result["paths"] == [str(tmp_path / "images" / "01_Sheet1.png")]
+
+
+def test_wait_for_worker_result_reports_result_stage_after_exit(
+    tmp_path: Path,
+) -> None:
+    """When worker has exited and no result arrives, report result stage."""
+    process = FakeWorkerProcess(returncode=1, stderr="missing result")
+    result_path = tmp_path / "result.json"
+
+    with pytest.raises(RenderError, match="stage=result worker exited without result"):
+        render._wait_for_worker_result(
+            process,
+            result_path=result_path,
+            wait_timeout_seconds=0.20,
+            post_exit_timeout_seconds=0.01,
+        )
+
+
+def test_get_render_subprocess_timeout_seconds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """_get_render_subprocess_join_timeout_seconds validates env values."""
+    """Subprocess timeout readers validate env values."""
+    monkeypatch.delenv("EXSTRUCT_RENDER_SUBPROCESS_STARTUP_TIMEOUT_SEC", raising=False)
     monkeypatch.delenv("EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC", raising=False)
+    monkeypatch.delenv("EXSTRUCT_RENDER_SUBPROCESS_RESULT_TIMEOUT_SEC", raising=False)
+    assert render._get_render_subprocess_startup_timeout_seconds() == 5.0
     assert render._get_render_subprocess_join_timeout_seconds() == 120.0
+    assert render._get_render_subprocess_result_timeout_seconds() == 5.0
 
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_STARTUP_TIMEOUT_SEC", "3")
     monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC", "30")
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_RESULT_TIMEOUT_SEC", "7")
+    assert render._get_render_subprocess_startup_timeout_seconds() == 3.0
     assert render._get_render_subprocess_join_timeout_seconds() == 30.0
+    assert render._get_render_subprocess_result_timeout_seconds() == 7.0
 
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_STARTUP_TIMEOUT_SEC", "0")
     monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC", "0")
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_RESULT_TIMEOUT_SEC", "0")
+    assert render._get_render_subprocess_startup_timeout_seconds() == 5.0
     assert render._get_render_subprocess_join_timeout_seconds() == 120.0
+    assert render._get_render_subprocess_result_timeout_seconds() == 5.0
 
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_STARTUP_TIMEOUT_SEC", "NaN")
     monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC", "NaN")
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_RESULT_TIMEOUT_SEC", "NaN")
+    assert render._get_render_subprocess_startup_timeout_seconds() == 5.0
     assert render._get_render_subprocess_join_timeout_seconds() == 120.0
+    assert render._get_render_subprocess_result_timeout_seconds() == 5.0
 
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_STARTUP_TIMEOUT_SEC", "inf")
     monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC", "inf")
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_RESULT_TIMEOUT_SEC", "inf")
+    assert render._get_render_subprocess_startup_timeout_seconds() == 5.0
     assert render._get_render_subprocess_join_timeout_seconds() == 120.0
+    assert render._get_render_subprocess_result_timeout_seconds() == 5.0
 
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_STARTUP_TIMEOUT_SEC", "-inf")
     monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC", "-inf")
+    monkeypatch.setenv("EXSTRUCT_RENDER_SUBPROCESS_RESULT_TIMEOUT_SEC", "-inf")
+    assert render._get_render_subprocess_startup_timeout_seconds() == 5.0
     assert render._get_render_subprocess_join_timeout_seconds() == 120.0
-
-
-def test_render_pdf_pages_worker_success(tmp_path: Path) -> None:
-    """_render_pdf_pages_worker writes images and returns paths."""
-    pdf_path = tmp_path / "sheet_01.pdf"
-    pdf_path.write_bytes(b"%PDF-1.4")
-    output_dir = tmp_path / "images"
-    queue = FakeQueue()
-    fake_pdfium = cast(Any, ModuleType("pypdfium2"))
-    fake_pdfium.PdfDocument = FakePdfDocument
-
-    sys.modules["pypdfium2"] = fake_pdfium
-    try:
-        render._render_pdf_pages_worker(
-            pdf_path, output_dir, 0, "Sheet1", 144, cast(Any, queue)
-        )
-    finally:
-        sys.modules.pop("pypdfium2", None)
-
-    assert queue.payload == {
-        "paths": [
-            str(output_dir / "01_Sheet1.png"),
-            str(output_dir / "01_Sheet1_p02.png"),
-        ]
-    }
-    assert (output_dir / "01_Sheet1.png").exists()
-    assert (output_dir / "01_Sheet1_p02.png").exists()
-
-
-def test_render_pdf_pages_worker_error(tmp_path: Path) -> None:
-    """_render_pdf_pages_worker reports errors via queue."""
-    pdf_path = tmp_path / "sheet_01.pdf"
-    pdf_path.write_bytes(b"%PDF-1.4")
-    output_dir = tmp_path / "images"
-    queue = FakeQueue()
-
-    fake_pdfium = cast(Any, ModuleType("pypdfium2"))
-    fake_pdfium.PdfDocument = ExplodingPdfDocument
-    sys.modules["pypdfium2"] = fake_pdfium
-    try:
-        render._render_pdf_pages_worker(
-            pdf_path, output_dir, 0, "Sheet1", 144, cast(Any, queue)
-        )
-    finally:
-        sys.modules.pop("pypdfium2", None)
-
-    assert queue.payload == {"error": "boom"}
+    assert render._get_render_subprocess_result_timeout_seconds() == 5.0
 
 
 def test_sanitize_sheet_filename() -> None:

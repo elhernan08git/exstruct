@@ -22,3 +22,14 @@
 
 - For any env-based timeout parsed via `float()`, always reject non-finite values (`NaN`, `inf`, `-inf`) with `math.isfinite(...)` before range checks.
 - When adding timeout hardening, include explicit regression tests for `NaN/inf/-inf`; testing only invalid strings and `<= 0` is insufficient.
+
+## 2026-03-03 subprocess wait-order regression lessons
+
+- In multi-stage timeout flows, define one primary end-to-end budget explicitly (here: join timeout) and ensure secondary timeouts are only local grace windows.
+- When changing wait order, add regression tests that exceed the secondary timeout while staying inside the primary timeout to prevent accidental global timeout shrinkage.
+
+## 2026-03-03 capture evaluation modal-dialog lessons
+
+- For unattended Excel render evaluations, do not use fixed `A1:A1` as the minimal-range case; select a known non-empty single cell per workbook.
+- Add a run-validity rule for Excel modal dialogs (invalid run + rerun), otherwise stability metrics can be overstated.
+- In render paths that open Excel for export, explicitly set `app.display_alerts = False` even if other paths already do so.

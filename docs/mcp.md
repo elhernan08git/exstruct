@@ -91,13 +91,20 @@ exstruct-mcp --root C:\\data --log-file C:\\logs\\exstruct-mcp.log --on-conflict
   - If `out_dir` is omitted, a unique `<workbook_stem>_images` directory is created under MCP `--root`.
   - COM/Excel desktop is required.
   - This tool is currently shipped as `experimental` in MCP deployments.
-  - Recommended MCP runtime setting: `EXSTRUCT_RENDER_SUBPROCESS=0` (in-process PDF->PNG) to avoid subprocess-hang timeouts observed in some MCP contexts.
+  - MCP server runtime defaults `EXSTRUCT_RENDER_SUBPROCESS=1` via `setdefault` (subprocess PDF->PNG). If you prefer in-process rendering, set `EXSTRUCT_RENDER_SUBPROCESS=0` explicitly before starting the server.
   - Timeout tuning:
-    - `EXSTRUCT_RENDER_SUBPROCESS` (recommended `0` for MCP runtime)
     - `EXSTRUCT_MCP_CAPTURE_SHEET_IMAGES_TIMEOUT_SEC` (default `120`)
+    - `EXSTRUCT_RENDER_SUBPROCESS_STARTUP_TIMEOUT_SEC` (default `5`)
     - `EXSTRUCT_RENDER_SUBPROCESS_JOIN_TIMEOUT_SEC` (default `120`)
     - `EXSTRUCT_RENDER_SUBPROCESS_RESULT_TIMEOUT_SEC` (default `5`)
-  - Known trade-off for `EXSTRUCT_RENDER_SUBPROCESS=0`: lower crash isolation and potentially higher long-running process memory pressure.
+  - Stage-aware errors are returned from render subprocess mode:
+    - `stage=startup`: worker bootstrap/import/startup failed.
+    - `stage=join`: timed out while worker remained alive.
+    - `stage=result`: worker exited but result payload was missing/invalid.
+    - `stage=worker`: worker returned an explicit rendering failure.
+  - Trade-offs:
+    - `EXSTRUCT_RENDER_SUBPROCESS=0`: lower crash isolation and potentially higher long-running process memory pressure.
+    - `EXSTRUCT_RENDER_SUBPROCESS=1`: requires `sys.executable` + `exstruct` module resolution in the worker process.
 
 Example:
 

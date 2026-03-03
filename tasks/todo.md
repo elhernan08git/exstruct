@@ -83,7 +83,7 @@
 
 - [x] `uv run pytest tests/mcp/test_server.py tests/render/test_render_init.py`
 - [x] `uv run task precommit-run`
-- [ ] 手動確認: `exstruct_capture_sheet_images` を最小範囲 `sheet=Sheet1, range=A1:A1` で実行し、120sタイムアウトが解消していること
+- [x] 手動確認: `exstruct_capture_sheet_images` を最小範囲 `sheet=Sheet1, range=A1:A1` で実行し、120sタイムアウトが解消していること
 
 ## Rollout Review (template)
 
@@ -101,30 +101,103 @@
 
 ## Subprocess Stabilization Plan (2026-03-02)
 
-- [ ] `tasks/feature_spec.md` の 2026-03-02 Addendum をベースに実装方針を確定
-- [ ] `src/exstruct/render/` にサブプロセス worker 専用エントリポイントを追加（親の `stdin/-c` 実行に非依存）
-- [ ] `src/exstruct/render/__init__.py` の `_render_pdf_pages_subprocess` を結果先行フローへ変更（join先行を廃止）
-- [ ] startup/result/join の3段階タイムアウトと stage-aware エラー整形を実装
-- [ ] 例外/タイムアウト時のプロセス終了手順を統一（terminate/kill/cleanup）
-- [ ] `tests/render/test_render_init.py` に回帰テストを追加（worker結果返却済み + join遅延ケースで成功扱い）
-- [ ] `tests/render/test_render_init.py` に回帰テストを追加（worker bootstrapping 失敗時に actionable メッセージ）
-- [ ] `tests/render/test_render_init.py` に回帰テストを追加（result timeout / join timeout のエラーステージ区別）
-- [ ] `tests/mcp/test_server.py` に `EXSTRUCT_RENDER_SUBPROCESS=1` 相当の伝播/失敗メッセージ検証を追加
-- [ ] 代表Workbookセットで手動再検証（`EXSTRUCT_RENDER_SUBPROCESS=1`）
-- [ ] docs 更新（`docs/mcp.md`, `README.md`, `README.ja.md`）: サブプロセス再有効化条件と既知制約
+- [x] `tasks/feature_spec.md` の 2026-03-02 Addendum をベースに実装方針を確定
+- [x] `src/exstruct/render/` にサブプロセス worker 専用エントリポイントを追加（親の `stdin/-c` 実行に非依存）
+- [x] `src/exstruct/render/__init__.py` の `_render_pdf_pages_subprocess` を結果先行フローへ変更（join先行を廃止）
+- [x] startup/result/join の3段階タイムアウトと stage-aware エラー整形を実装
+- [x] 例外/タイムアウト時のプロセス終了手順を統一（terminate/kill/cleanup）
+- [x] `tests/render/test_render_init.py` に回帰テストを追加（worker結果返却済み + join遅延ケースで成功扱い）
+- [x] `tests/render/test_render_init.py` に回帰テストを追加（worker bootstrapping 失敗時に actionable メッセージ）
+- [x] `tests/render/test_render_init.py` に回帰テストを追加（result timeout / join timeout のエラーステージ区別）
+- [x] `tests/mcp/test_server.py` に `EXSTRUCT_RENDER_SUBPROCESS=1` 相当の伝播/失敗メッセージ検証を追加
+- [x] 代表Workbookセットで手動再検証（`EXSTRUCT_RENDER_SUBPROCESS=1`）
+- [x] docs 更新（`docs/mcp.md`, `README.md`, `README.ja.md`）: サブプロセス再有効化条件と既知制約
 
 ## Subprocess Stabilization Verification
 
-- [ ] `uv run pytest tests/render/test_render_init.py tests/mcp/test_server.py -q`
-- [ ] `uv run task precommit-run`
+- [x] `uv run pytest tests/render/test_render_init.py tests/mcp/test_server.py -q`
+- [x] `uv run task precommit-run`
 
-## Subprocess Stabilization Review (template)
+## Subprocess Stabilization Review
 
 - Summary:
-  - 
+  - `multiprocessing.Process + Queue` 経路を廃止し、`python -m exstruct.render.subprocess_worker` を使う独立 worker 起動に切り替えた。
+  - 親側は `result` 受信を優先し、受信後の `join` タイムアウトは警告 + terminate/kill cleanup として扱うよう変更した（成功結果は保持）。
+  - `RenderError` を `stage=startup/result/worker` で判別できる形に整理し、stderr 抜粋を付与する実装を追加した。
 - Verification:
-  - 
+  - `uv run pytest tests/render/test_render_init.py tests/mcp/test_server.py -q` -> 78 passed
+  - `uv run task precommit-run` -> ruff / ruff-format / mypy passed
 - Risks:
-  - 
+  - 新しい worker は `sys.executable` 依存のため、実行環境で `exstruct` モジュール解決が崩れている場合は startup エラーになる。
+  - stage=join は現状 warning 扱いのため、長期運用で join timeout 頻発時の監視指標整備が別途必要。
 - Follow-ups:
-  - 
+  - 代表Workbookセットで `EXSTRUCT_RENDER_SUBPROCESS=1` の実機成功率を再測定し、99%基準を評価する。
+  - docs に startup timeout env (`EXSTRUCT_RENDER_SUBPROCESS_STARTUP_TIMEOUT_SEC`) と stage-aware エラー例を追記する。
+
+## Subprocess Stabilization Manual Evaluation (2026-03-03)
+
+- [x] Ran representative workbook matrix with `EXSTRUCT_RENDER_SUBPROCESS=1` using tool path (`run_capture_sheet_images_tool`).
+- [x] Repeated 3 times for each applicable case (`full`, `sheet_only`, `min_range`).
+- Results:
+  - Total runs: 63
+  - Success rate: 63/63 (100.00%)
+  - p50: 3.858s
+  - p95: 6.011s
+  - Max: 216.099s
+  - Failures: 0
+- Notes:
+  - Two outliers (`sample/basic/sample.xlsx` + `min_range`) were >60s (66.123s, 216.099s) but completed successfully.
+  - No opaque timeout error was observed in this run.
+  - Follow-up caveat (2026-03-03): fixed `min_range=A1:A1` can trigger Excel modal confirmation on some books; unattended-run metrics must be re-validated with non-empty-cell minimal range.
+- Artifacts:
+  - `tmp_eval_capture/subprocess_eval/results.json`
+  - `tmp_eval_capture/subprocess_eval/summary.md`
+
+## Subprocess Stabilization Docs Update (2026-03-03)
+
+- [x] `docs/mcp.md` に startup timeout env（`EXSTRUCT_RENDER_SUBPROCESS_STARTUP_TIMEOUT_SEC`）を追記
+- [x] `docs/mcp.md` に stage-aware エラー（`startup/join/result/worker`）の運用ガイドを追記
+- [x] `README.md` / `README.ja.md` に MCP runtime 既定値（`EXSTRUCT_RENDER_SUBPROCESS=0`）と `EXSTRUCT_RENDER_SUBPROCESS=1` 明示有効化手順を追記
+- [x] `CHANGELOG.md` Unreleased に subprocess 安定化とドキュメント更新を反映
+
+## Subprocess Docs Review
+
+- Summary:
+  - サブプロセス安定化実装に合わせて、MCP運用ガイドを `startup/join/result/worker` の4段階エラー分類で明確化した。
+  - timeout環境変数の説明を 4 変数（MCP全体 + startup/join/result）に統一した。
+  - 既定運用（MCPでは `EXSTRUCT_RENDER_SUBPROCESS=0`）と、明示 opt-in（`=1`）の使い分けを README と MCP docs に反映した。
+- Verification:
+  - ドキュメント更新のみ（コード/テスト変更なし）。
+
+## Evaluation Hardening Follow-up (2026-03-03)
+
+- [x] `src/exstruct/render/__init__.py` の画像レンダリング経路でも `app.display_alerts = False` を明示設定
+- [x] `tests/render/test_render_init.py` に `display_alerts=False` 設定回帰確認を追加
+- [x] `tasks/capture_sheet_images_eval.md` の最小範囲ケースを `A1:A1` 固定から「非空1セル」に変更
+- [x] `tasks/capture_sheet_images_eval.md` に Excel モーダル発生時の無効ラン/再実行ルールを追加
+- [x] `tasks/lessons.md` に今回の評価手順改善ルールを追記
+
+## Evaluation Hardening Review
+
+- Summary:
+  - unattended 評価中に Excel モーダルで停止しうる問題に対して、実装（`display_alerts=False`）と手順（非空1セル最小範囲 + 無効ラン規則）の両面を修正した。
+- Verification:
+  - `uv run pytest tests/render/test_render_init.py -q`
+
+## Default Switch Plan (2026-03-03)
+
+- [x] MCP相当 timeout 条件で `EXSTRUCT_RENDER_SUBPROCESS=0/1` の profile 比較を実施
+- [x] profile比較結果を `tmp_eval_capture/profile_compare/results.json` と `summary.md` に保存
+- [x] `src/exstruct/mcp/server.py` の既定値を `EXSTRUCT_RENDER_SUBPROCESS=1` に変更
+- [x] `tests/mcp/test_server.py` の既定値/既存値維持テストを更新
+- [x] `README.md` / `README.ja.md` / `docs/mcp.md` / `CHANGELOG.md` の運用方針を「既定=1」に更新
+
+## Default Switch Review
+
+- Summary:
+  - profile比較（0/1 各63run）で両方 100% 成功を確認し、MCP既定を `EXSTRUCT_RENDER_SUBPROCESS=1` に切り替えた。
+  - in-process 継続が必要な配備向けに `EXSTRUCT_RENDER_SUBPROCESS=0` 明示指定手順を維持した。
+- Verification:
+  - profile=0: total=63, success=100.00%, p50=2.434769s, p95=2.933822s, max=3.162273s, failures=0
+  - profile=1: total=63, success=100.00%, p50=3.346434s, p95=3.868789s, max=4.002274s, failures=0
+  - artifacts: `tmp_eval_capture/profile_compare/results.json`, `tmp_eval_capture/profile_compare/summary.md`
