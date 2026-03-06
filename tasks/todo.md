@@ -46,7 +46,7 @@
 - [x] `sample/flowchart/sample-shape-connector.xlsx` を使った connector graph 回帰 test を追加する
 - [x] `sample/basic/sample.xlsx` を使った chart extraction 回帰 test を追加する
 - [x] LibreOffice unavailable fallback の unit test を追加する
-- [ ] 必要なら `pytest.mark.libreoffice` の optional smoke test を追加する
+- [x] 必要なら `pytest.mark.libreoffice` の optional smoke test を追加する
 - [x] `uv run pytest` または対象 test を実行して結果を確認する
 - [x] `uv run task precommit-run` を実行し、ruff / mypy / format 系の問題が無いことを確認する
 
@@ -58,6 +58,10 @@
 - [x] rendering と auto page-break が v1 対象外であることを明記する
 
 ## Review
+
+- 2026-03-06 follow-up:
+  - `pytest.mark.libreoffice` smoke test と `RUN_LIBREOFFICE_SMOKE=1` gate を追加
+  - LibreOffice runtime あり環境で smoke test を実行して通過
 
 - 実装状態: 進行中
 - この時点で完了済み:

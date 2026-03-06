@@ -130,6 +130,7 @@ plugins = ["pydantic.mypy"]
 markers = [
     "com: requires Excel COM (Windows + Excel)",
     "render: requires Excel COM and pypdfium2; set RUN_RENDER_SMOKE=1 to enable",
+    "libreoffice: requires LibreOffice runtime; set RUN_LIBREOFFICE_SMOKE=1 to enable",
 ]
 
 [tool.taskipy.tasks]

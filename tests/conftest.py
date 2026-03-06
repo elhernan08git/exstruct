@@ -3,7 +3,10 @@ from __future__ import annotations
 from functools import lru_cache
 import importlib.util
 import os
+from pathlib import Path
 import re
+import shutil
+import subprocess
 import sys
 
 import pytest
@@ -12,6 +15,7 @@ IS_WINDOWS = sys.platform == "win32"
 SKIP_COM_TESTS = os.getenv("SKIP_COM_TESTS") == "1"
 FORCE_COM_TESTS = os.getenv("FORCE_COM_TESTS") == "1"
 RUN_RENDER_SMOKE = os.getenv("RUN_RENDER_SMOKE") == "1"
+RUN_LIBREOFFICE_SMOKE = os.getenv("RUN_LIBREOFFICE_SMOKE") == "1"
 
 
 def _markexpr_requests_com(markexpr: str) -> bool:
@@ -35,6 +39,10 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
         "render: requires Excel COM and pypdfium2; set RUN_RENDER_SMOKE=1 to enable.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "libreoffice: requires LibreOffice runtime; set RUN_LIBREOFFICE_SMOKE=1 to enable.",
     )
 
 
@@ -61,6 +69,37 @@ def _has_pdfium() -> bool:
 def _has_pillow() -> bool:
     """Return True if Pillow (PIL) is importable."""
     return importlib.util.find_spec("PIL") is not None
+
+
+@lru_cache(maxsize=1)
+def _has_libreoffice_runtime() -> bool:
+    """Return True if a runnable LibreOffice executable is available."""
+    raw_path = os.getenv("EXSTRUCT_LIBREOFFICE_PATH")
+    candidates = [raw_path] if raw_path else ["soffice", "soffice.exe"]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        resolved = candidate
+        if raw_path:
+            if not Path(candidate).exists():
+                continue
+        else:
+            which = shutil.which(candidate)
+            if which is None:
+                continue
+            resolved = which
+        try:
+            subprocess.run(
+                [resolved, "--version"],
+                capture_output=True,
+                check=True,
+                text=True,
+                timeout=5.0,
+            )
+        except Exception:
+            continue
+        return True
+    return False
 
 
 def _com_skip_reason() -> str | None:
@@ -98,10 +137,30 @@ def _render_skip_reason() -> str | None:
     return None
 
 
+def _libreoffice_skip_reason() -> str | None:
+    """
+    Return a skip reason for libreoffice-marked tests, or None when they should run.
+
+    LibreOffice smoke tests are gated by RUN_LIBREOFFICE_SMOKE=1.
+    """
+    if not RUN_LIBREOFFICE_SMOKE:
+        return (
+            "LibreOffice smoke tests disabled; set RUN_LIBREOFFICE_SMOKE=1 to enable."
+        )
+    if not _has_libreoffice_runtime():
+        return "LibreOffice runtime is unavailable."
+    return None
+
+
 def pytest_runtest_setup(item: pytest.Item) -> None:
     """Skip tests based on resource markers and environment availability."""
     if item.get_closest_marker("render") is not None:
         reason = _render_skip_reason()
+        if reason:
+            pytest.skip(reason)
+        return
+    if item.get_closest_marker("libreoffice") is not None:
+        reason = _libreoffice_skip_reason()
         if reason:
             pytest.skip(reason)
         return
