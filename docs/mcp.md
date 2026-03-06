@@ -122,6 +122,8 @@ Example:
 
 - `options.alpha_col` defaults to `true` in MCP (column keys become `A`, `B`, ...).
 - Set `options.alpha_col=false` if you need legacy 0-based numeric string keys.
+- `options.include_backend_metadata` defaults to `false` to keep shape/chart output compact.
+- Set `options.include_backend_metadata=true` when you need `provenance`, `approximation_level`, and `confidence`.
 - `mode` is an extraction detail level (not sheet scope):
 
 | Mode | When to use | Main output characteristics |

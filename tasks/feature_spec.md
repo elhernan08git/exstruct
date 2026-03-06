@@ -1,5 +1,16 @@
 # Feature Spec
 
+## 2026-03-06 backend metadata output follow-up
+
+- shape/chart backend metadata fields (`provenance`, `approximation_level`, `confidence`) remain part of the internal models.
+- Serialized output treats these fields as opt-in to reduce token usage.
+- A shared public flag `include_backend_metadata` controls emission for Python serialization helpers, `ExStructEngine` filters, CLI, and MCP extract requests.
+- Default behavior:
+  - CLI: `--include-backend-metadata` not specified -> metadata omitted
+  - MCP: `options.include_backend_metadata=false`
+  - Python serialization helpers: `include_backend_metadata=False`
+- Backend extraction logic and schema field definitions remain unchanged; only output shaping changes.
+
 ## Issue
 
 - Issue #56: LibreOffice backend / `libreoffice` mode 追加

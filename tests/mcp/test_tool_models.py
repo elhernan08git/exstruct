@@ -29,6 +29,7 @@ def test_extract_tool_input_defaults() -> None:
     assert payload.format == "json"
     assert payload.out_dir is None
     assert payload.out_name is None
+    assert payload.options.include_backend_metadata is False
 
 
 def test_capture_sheet_images_tool_input_defaults() -> None:

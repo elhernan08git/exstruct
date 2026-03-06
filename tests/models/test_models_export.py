@@ -208,3 +208,67 @@ def test_model_dump_exclude_none_omits_backend_metadata() -> None:
     assert "provenance" not in chart_dump
     assert "approximation_level" not in chart_dump
     assert "confidence" not in chart_dump
+
+
+def test_sheet_to_json_omits_backend_metadata_by_default() -> None:
+    """Verify that sheet JSON hides backend metadata unless explicitly enabled."""
+
+    shape = Shape(
+        id=1,
+        text="shape",
+        l=0,
+        t=0,
+        provenance="excel_com",
+        approximation_level="direct",
+        confidence=1.0,
+    )
+    chart = Chart(
+        name="chart",
+        chart_type="Line",
+        title=None,
+        y_axis_title="",
+        y_axis_range=[],
+        series=[],
+        l=0,
+        t=0,
+        provenance="libreoffice_uno",
+        approximation_level="partial",
+        confidence=0.8,
+    )
+    sheet = SheetData(rows=[], shapes=[shape], charts=[chart])
+
+    default_payload = json.loads(sheet.to_json())
+    explicit_payload = json.loads(sheet.to_json(include_backend_metadata=True))
+
+    assert "provenance" not in default_payload["shapes"][0]
+    assert "approximation_level" not in default_payload["shapes"][0]
+    assert "confidence" not in default_payload["shapes"][0]
+    assert "provenance" not in default_payload["charts"][0]
+    assert "approximation_level" not in default_payload["charts"][0]
+    assert "confidence" not in default_payload["charts"][0]
+    assert explicit_payload["shapes"][0]["provenance"] == "excel_com"
+    assert explicit_payload["charts"][0]["provenance"] == "libreoffice_uno"
+
+
+def test_workbook_to_json_includes_backend_metadata_when_enabled() -> None:
+    """Verify that workbook JSON can opt into backend metadata fields."""
+
+    sheet = SheetData(
+        rows=[],
+        shapes=[
+            Shape(
+                id=1,
+                text="shape",
+                l=0,
+                t=0,
+                provenance="excel_com",
+                approximation_level="direct",
+                confidence=1.0,
+            )
+        ],
+        charts=[],
+    )
+    workbook = WorkbookData(book_name="sample.xlsx", sheets={"Sheet1": sheet})
+
+    payload = json.loads(workbook.to_json(include_backend_metadata=True))
+    assert payload["sheets"]["Sheet1"]["shapes"][0]["provenance"] == "excel_com"

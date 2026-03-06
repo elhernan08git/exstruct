@@ -15,6 +15,7 @@ from ..models import (
     PrintArea,
     PrintAreaView,
     Shape,
+    SheetData,
     SmartArt,
     WorkbookData,
 )
@@ -28,6 +29,64 @@ from .serialize import (
 )
 
 logger = logging.getLogger(__name__)
+_BACKEND_METADATA_CLEAR = {
+    "provenance": None,
+    "approximation_level": None,
+    "confidence": None,
+}
+
+
+def _without_shape_backend_metadata(
+    shape: Shape | Arrow | SmartArt,
+) -> Shape | Arrow | SmartArt:
+    """Return a shape-like model copy without backend metadata fields."""
+
+    return shape.model_copy(update=_BACKEND_METADATA_CLEAR)
+
+
+def _without_chart_backend_metadata(chart: Chart) -> Chart:
+    """Return a chart model copy without backend metadata fields."""
+
+    return chart.model_copy(update=_BACKEND_METADATA_CLEAR)
+
+
+def _without_sheet_backend_metadata(sheet: SheetData) -> SheetData:
+    """Return a sheet copy with shape/chart backend metadata removed."""
+
+    return sheet.model_copy(
+        update={
+            "shapes": [
+                _without_shape_backend_metadata(shape) for shape in sheet.shapes
+            ],
+            "charts": [
+                _without_chart_backend_metadata(chart) for chart in sheet.charts
+            ],
+        }
+    )
+
+
+def _without_workbook_backend_metadata(workbook: WorkbookData) -> WorkbookData:
+    """Return a workbook copy with shape/chart backend metadata removed."""
+
+    return workbook.model_copy(
+        update={
+            "sheets": {
+                sheet_name: _without_sheet_backend_metadata(sheet_data)
+                for sheet_name, sheet_data in workbook.sheets.items()
+            }
+        }
+    )
+
+
+def _without_print_area_view_backend_metadata(view: PrintAreaView) -> PrintAreaView:
+    """Return a print-area view copy with shape/chart backend metadata removed."""
+
+    return view.model_copy(
+        update={
+            "shapes": [_without_shape_backend_metadata(shape) for shape in view.shapes],
+            "charts": [_without_chart_backend_metadata(chart) for chart in view.charts],
+        }
+    )
 
 
 def dict_without_empty_values(obj: object) -> JsonStructure:
@@ -80,19 +139,42 @@ def _write_text(path: Path, text: str) -> None:
 
 
 def save_as_json(
-    model: WorkbookData, path: Path, *, pretty: bool = False, indent: int | None = None
+    model: WorkbookData,
+    path: Path,
+    *,
+    pretty: bool = False,
+    indent: int | None = None,
+    include_backend_metadata: bool = False,
 ) -> None:
-    text = serialize_workbook(model, fmt="json", pretty=pretty, indent=indent)
+    text = serialize_workbook(
+        model,
+        fmt="json",
+        pretty=pretty,
+        indent=indent,
+        include_backend_metadata=include_backend_metadata,
+    )
     _write_text(path, text)
 
 
-def save_as_yaml(model: WorkbookData, path: Path) -> None:
-    text = serialize_workbook(model, fmt="yaml")
+def save_as_yaml(
+    model: WorkbookData, path: Path, *, include_backend_metadata: bool = False
+) -> None:
+    text = serialize_workbook(
+        model,
+        fmt="yaml",
+        include_backend_metadata=include_backend_metadata,
+    )
     _write_text(path, text)
 
 
-def save_as_toon(model: WorkbookData, path: Path) -> None:
-    text = serialize_workbook(model, fmt="toon")
+def save_as_toon(
+    model: WorkbookData, path: Path, *, include_backend_metadata: bool = False
+) -> None:
+    text = serialize_workbook(
+        model,
+        fmt="toon",
+        include_backend_metadata=include_backend_metadata,
+    )
     _write_text(path, text)
 
 
@@ -257,6 +339,7 @@ def _iter_area_views(
     include_charts: bool,
     include_shape_size: bool,
     include_chart_size: bool,
+    include_backend_metadata: bool,
 ) -> dict[str, list[PrintAreaView]]:
     views: dict[str, list[PrintAreaView]] = {}
     for sheet_name, sheet in workbook.sheets.items():
@@ -285,17 +368,18 @@ def _iter_area_views(
                 area_charts = [
                     c.model_copy(update={"w": None, "h": None}) for c in area_charts
                 ]
-            sheet_views.append(
-                PrintAreaView(
-                    book_name=workbook.book_name,
-                    sheet_name=sheet_name,
-                    area=area,
-                    shapes=area_shapes,
-                    charts=area_charts,
-                    rows=rows_in_area,
-                    table_candidates=area_tables,
-                )
+            view = PrintAreaView(
+                book_name=workbook.book_name,
+                sheet_name=sheet_name,
+                area=area,
+                shapes=area_shapes,
+                charts=area_charts,
+                rows=rows_in_area,
+                table_candidates=area_tables,
             )
+            if not include_backend_metadata:
+                view = _without_print_area_view_backend_metadata(view)
+            sheet_views.append(view)
         if sheet_views:
             views[sheet_name] = sheet_views
     return views
@@ -309,6 +393,7 @@ def build_print_area_views(
     include_charts: bool = True,
     include_shape_size: bool = True,
     include_chart_size: bool = True,
+    include_backend_metadata: bool = False,
 ) -> dict[str, list[PrintAreaView]]:
     """
     Construct PrintAreaView instances for all print areas in the workbook.
@@ -322,6 +407,7 @@ def build_print_area_views(
         include_charts=include_charts,
         include_shape_size=include_shape_size,
         include_chart_size=include_chart_size,
+        include_backend_metadata=include_backend_metadata,
     )
 
 
@@ -337,6 +423,7 @@ def save_print_area_views(
     include_charts: bool = True,
     include_shape_size: bool = True,
     include_chart_size: bool = True,
+    include_backend_metadata: bool = False,
 ) -> dict[str, Path]:
     """
     Save each print area as an individual file in the specified format.
@@ -356,6 +443,7 @@ def save_print_area_views(
         include_charts=include_charts,
         include_shape_size=include_shape_size,
         include_chart_size=include_chart_size,
+        include_backend_metadata=include_backend_metadata,
     )
     if not views:
         logger.info("No print areas found; skipping export to %s", output_dir)
@@ -397,6 +485,7 @@ def save_auto_page_break_views(
     include_charts: bool = True,
     include_shape_size: bool = True,
     include_chart_size: bool = True,
+    include_backend_metadata: bool = False,
 ) -> dict[str, Path]:
     """
     Save auto page-break areas (computed via Excel COM) per sheet in the specified format.
@@ -417,6 +506,7 @@ def save_auto_page_break_views(
         include_charts=include_charts,
         include_shape_size=include_shape_size,
         include_chart_size=include_chart_size,
+        include_backend_metadata=include_backend_metadata,
     )
     if not views:
         logger.info("No auto page-break areas found; skipping export to %s", output_dir)
@@ -452,6 +542,7 @@ def serialize_workbook(
     *,
     pretty: bool = False,
     indent: int | None = None,
+    include_backend_metadata: bool = False,
 ) -> str:
     """
     Convert WorkbookData to string in the requested format without writing to disk.
@@ -464,8 +555,11 @@ def serialize_workbook(
         error_message="Unsupported export format '{fmt}'. Allowed: json, yaml, yml, toon.",
     )
     dump_start = time.monotonic()
+    model_for_dump = (
+        model if include_backend_metadata else _without_workbook_backend_metadata(model)
+    )
     filtered_dict = dict_without_empty_values(
-        model.model_dump(exclude_none=True, by_alias=True)
+        model_for_dump.model_dump(exclude_none=True, by_alias=True)
     )
     logger.info(
         "serialize_workbook model_dump completed in %.2fs",
@@ -492,6 +586,7 @@ def save_sheets_as_json(
     *,
     pretty: bool = False,
     indent: int | None = None,
+    include_backend_metadata: bool = False,
 ) -> dict[str, Path]:
     """
     Save each sheet as an individual JSON file.
@@ -501,11 +596,16 @@ def save_sheets_as_json(
     output_dir.mkdir(parents=True, exist_ok=True)
     written: dict[str, Path] = {}
     for sheet_name, sheet_data in workbook.sheets.items():
+        payload_sheet = (
+            sheet_data
+            if include_backend_metadata
+            else _without_sheet_backend_metadata(sheet_data)
+        )
         payload = dict_without_empty_values(
             {
                 "book_name": workbook.book_name,
                 "sheet_name": sheet_name,
-                "sheet": sheet_data.model_dump(exclude_none=True, by_alias=True),
+                "sheet": payload_sheet.model_dump(exclude_none=True, by_alias=True),
             }
         )
         file_name = f"{_sanitize_sheet_filename(sheet_name)}.json"
@@ -525,6 +625,7 @@ def save_sheets(
     *,
     pretty: bool = False,
     indent: int | None = None,
+    include_backend_metadata: bool = False,
 ) -> dict[str, Path]:
     """
     Save each sheet as an individual file in the specified format (json/yaml/toon).
@@ -540,11 +641,16 @@ def save_sheets(
     output_dir.mkdir(parents=True, exist_ok=True)
     written: dict[str, Path] = {}
     for sheet_name, sheet_data in workbook.sheets.items():
+        payload_sheet = (
+            sheet_data
+            if include_backend_metadata
+            else _without_sheet_backend_metadata(sheet_data)
+        )
         payload = dict_without_empty_values(
             {
                 "book_name": workbook.book_name,
                 "sheet_name": sheet_name,
-                "sheet": sheet_data.model_dump(exclude_none=True, by_alias=True),
+                "sheet": payload_sheet.model_dump(exclude_none=True, by_alias=True),
             }
         )
         suffix = {"json": ".json", "yaml": ".yaml", "toon": ".toon"}[format_hint]

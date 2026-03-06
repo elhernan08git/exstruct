@@ -1,5 +1,25 @@
 # Todo
 
+## 2026-03-06 Backend Metadata Output Follow-up
+
+### Planning
+
+- [x] shape/chart backend metadata の常時出力箇所を調査する
+- [x] `include_backend_metadata` を Python API / engine / CLI / MCP の共通オプションとして追加する
+- [x] 既定値を metadata 非表示に切り替え、明示指定時のみ出力する
+- [x] 直列化 helper / model helper / per-sheet / per-area export の挙動を揃える
+- [x] README / API docs / MCP docs / release note / spec を更新する
+- [x] 関連 unit test を追加・更新する
+
+### Review
+
+- `serialize_workbook`, `save_sheets`, `save_print_area_views`, `save_auto_page_break_views` に `include_backend_metadata` を追加し、shape/chart metadata を出力時だけ制御するようにした
+- `SheetData` / `WorkbookData` / `PrintAreaView` の `to_json` / `to_yaml` / `to_toon` / `save` に同フラグを通し、raw model 直列化の既定値も揃えた
+- `FilterOptions.include_backend_metadata`, CLI `--include-backend-metadata`, MCP `options.include_backend_metadata` を追加した
+- 追加検証:
+  - `uv run pytest tests/models/test_models_export.py tests/engine/test_engine.py tests/cli/test_cli.py tests/mcp/test_extract_runner_utils.py tests/mcp/test_tool_models.py tests/core/test_mode_output.py -k "not mark.com and not standard and not verbose and not line and not connector" -q`
+  - `uv run pytest tests/io/test_print_area_views.py tests/core/test_error_handling_exceptions.py tests/export/test_export_requirements.py tests/mcp/test_tools_handlers.py tests/mcp/test_extract_alpha_col.py -q`
+
 ## 2026-03-06 README Sync
 
 ### Planning

@@ -209,13 +209,14 @@ WorkbookData {
 
 共通:
 
-- `to_json(pretty=False, indent=None)`
-- `to_yaml()` (`pyyaml` 必須)
-- `to_toon()` (`python-toon` 必須)
-- `save(path, pretty=False, indent=None)`
+- `to_json(pretty=False, indent=None, include_backend_metadata=False)`
+- `to_yaml(include_backend_metadata=False)` (`pyyaml` 必須)
+- `to_toon(include_backend_metadata=False)` (`python-toon` 必須)
+- `save(path, pretty=False, indent=None, include_backend_metadata=False)`
   - 拡張子 `.json` / `.yaml` / `.yml` / `.toon` を自動判別
   - 非対応拡張子は `ValueError`
 - `model_dump(exclude_none=True)` 後に `dict_without_empty_values` で空値を除去
+- 既定では shape/chart の backend metadata (`provenance`, `approximation_level`, `confidence`) は直列化出力に含めない
 
 `SheetData`:
 

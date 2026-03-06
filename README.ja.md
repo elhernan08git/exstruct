@@ -31,6 +31,7 @@ LLM/RAG 向けに検出ヒューリスティックや出力モードを調整可
 - **出力モード**: `light`（セル＋テーブル候補＋印刷範囲のみ）、`libreoffice`（`.xlsx/.xlsm` 向けの best-effort 非 COM モード。LibreOffice runtime があれば結合セル・図形・コネクタ・チャートを追加）、`standard`（Excel COM でテキスト付き図形＋矢印、チャート、SmartArt、セル結合範囲）、`verbose`（全図形を幅高さ付きで出力、セルのハイパーリンクも出力）。
 - **数式取得**: `formulas_map`（数式文字列 → セル座標）を openpyxl/COM で取得。`verbose` 既定、`include_formulas_map` で制御。
 - **フォーマット**: JSON（デフォルトはコンパクト、`--pretty` で整形）、YAML、TOON（任意依存）。
+- **backend metadata は opt-in**: shape/chart の `provenance` / `approximation_level` / `confidence` は、トークン節約のため既定では直列化出力に含めません。必要な場合だけ `--include-backend-metadata` または `include_backend_metadata=True` を使います。
 - **テーブル検出のチューニング**: API でヒューリスティックを動的に変更可能。
 - **ハイパーリンク抽出**: `verbose` モード（または `include_cell_links=True` 指定）でセルのリンクを `links` に出力。
 - **CLI レンダリング**（Excel COM 必須）: `standard` / `verbose` では PDF とシート画像を生成可能。
@@ -63,6 +64,7 @@ exstruct input.xlsx --format toon          # TOON（python-toon が必要）
 exstruct input.xlsx --sheets-dir sheets/   # シートごとに分割出力
 exstruct input.xlsx --auto-page-breaks-dir auto_areas/  # COM 限定（利用可能な環境のみ表示）
 exstruct input.xlsx --alpha-col           # 列キーを A, B, ..., AA 形式で出力
+exstruct input.xlsx --include-backend-metadata  # shape/chart の backend metadata を含める
 exstruct input.xlsx --mode light           # セル＋テーブル候補のみ
 exstruct input.xlsx --mode libreoffice     # COM なしで図形/コネクタ/チャートを best-effort 抽出
 exstruct input.xlsx --pdf --image          # PDF と PNG（Excel COM 必須）
@@ -71,6 +73,7 @@ exstruct input.xlsx --pdf --image          # PDF と PNG（Excel COM 必須）
 自動改ページ範囲の書き出しは API/CLI 両方に対応（Excel/COM が必要）し、CLI は利用可能な環境でのみ `--auto-page-breaks-dir` を表示します。
 `mode=libreoffice` では `--pdf` / `--image` / `--auto-page-breaks-dir` を早期エラーにし、これらの機能は `standard` または `verbose` + Excel COM を前提にします。
 CLI の既定では列キーは従来どおり 0 始まりの数値文字列（`"0"`, `"1"`, ...）です。Excel 形式（`"A"`, `"B"`, ...）が必要な場合は `--alpha-col` を指定してください。
+CLI の既定では shape/chart の `provenance` / `approximation_level` / `confidence` も出力しません。必要な場合は `--include-backend-metadata` を指定してください。
 注意: MCP の `exstruct_extract` は `options.alpha_col=true` が既定で、CLI の既定（`false`）とは異なります。
 
 ## MCPサーバー (標準入出力)
@@ -157,6 +160,7 @@ set_table_detection_params(table_score_threshold=0.3, density_min=0.04)
 # モード: "light" / "standard" / "verbose"
 wb = extract("input.xlsx", mode="standard")  # standard ではリンクはデフォルト非出力
 export(wb, Path("out.json"), pretty=False)  # コンパクト JSON
+export(wb, Path("out.json"), include_backend_metadata=True)  # backend metadata も含める
 
 # モデルの便利メソッド: 反復・インデックス・直列化
 first_sheet = wb["Sheet1"]           # __getitem__ でシート取得
@@ -165,6 +169,7 @@ for name, sheet in wb:               # __iter__ で (name, SheetData) を列挙
 wb.save("out.json", pretty=True)     # WorkbookData を拡張子に応じて保存
 first_sheet.save("sheet.json")       # SheetData も同様に保存
 print(first_sheet.to_yaml())         # YAML 文字列（pyyaml 必須）
+print(first_sheet.to_json(include_backend_metadata=True))  # 必要なときだけ backend metadata を含める
 
 # ExStructEngine: インスタンスごとの設定（ネスト構造）
 from exstruct import (
@@ -181,7 +186,10 @@ engine = ExStructEngine(
     options=StructOptions(mode="verbose"),  # verbose ではハイパーリンクがデフォルトで含まれる
     output=OutputOptions(
         format=FormatOptions(pretty=True),
-        filters=FilterOptions(include_shapes=False),  # 図形を出力から除外
+        filters=FilterOptions(
+            include_shapes=False,
+            include_backend_metadata=True,
+        ),  # 図形を除外しつつ backend metadata は保持
         destinations=DestinationOptions(sheets_dir=Path("out_sheets")),  # シートごとに保存
     ),
 )

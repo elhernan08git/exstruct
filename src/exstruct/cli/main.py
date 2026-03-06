@@ -129,6 +129,14 @@ def build_parser(
         action="store_true",
         help="Output column keys as Excel-style ABC names (A, B, ..., Z, AA, ...) instead of 0-based indices.",
     )
+    parser.add_argument(
+        "--include-backend-metadata",
+        action="store_true",
+        help=(
+            "Include shape/chart backend metadata fields "
+            "(provenance, approximation_level, confidence)."
+        ),
+    )
     return parser
 
 
@@ -164,6 +172,7 @@ def main(argv: list[str] | None = None) -> int:
             print_areas_dir=args.print_areas_dir,
             auto_page_breaks_dir=getattr(args, "auto_page_breaks_dir", None),
             alpha_col=args.alpha_col,
+            include_backend_metadata=args.include_backend_metadata,
         )
         return 0
     except Exception as e:

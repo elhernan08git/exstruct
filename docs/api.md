@@ -65,6 +65,7 @@ process_excel(
     output_path=None,  # default: stdout (redirect if you want a file)
     sheets_dir=Path("out_sheets"),  # optional per-sheet outputs
     out_fmt="json",
+    include_backend_metadata=True,
     image=True,
     pdf=True,
     mode="standard",
@@ -194,11 +195,14 @@ See generated/models.md for the detailed model fields (run `python scripts/gen_m
 ### Model helpers (SheetData / WorkbookData)
 
 - `to_json(pretty=False, indent=None)` → JSON string (pretty when requested)
-- `to_yaml()` → YAML string (requires `pyyaml`)
-- `to_toon()` → TOON string (requires `python-toon`)
-- `save(path, pretty=False, indent=None)` → infers format from suffix (`.json/.yaml/.yml/.toon`)
+- `to_json(pretty=False, indent=None, include_backend_metadata=False)` → JSON string (pretty when requested)
+- `to_yaml(include_backend_metadata=False)` → YAML string (requires `pyyaml`)
+- `to_toon(include_backend_metadata=False)` → TOON string (requires `python-toon`)
+- `save(path, pretty=False, indent=None, include_backend_metadata=False)` → infers format from suffix (`.json/.yaml/.yml/.toon`)
 - `WorkbookData.__getitem__(name)` → get a SheetData by name
 - `WorkbookData.__iter__()` → yields `(sheet_name, SheetData)` in order
+
+Serialized output omits shape/chart backend metadata (`provenance`, `approximation_level`, `confidence`) by default to reduce token usage. Set `include_backend_metadata=True` when you need those fields.
 
 Example:
 

@@ -41,6 +41,7 @@ Detection heuristics and output modes are adjustable for LLM/RAG pipelines.
 - **Output modes**: `light` (cells + table candidates + print areas only), `libreoffice` (best-effort non-COM mode for `.xlsx/.xlsm`; adds merged cells, shapes, connectors, and charts when the LibreOffice runtime is available), `standard` (Excel COM mode with texted shapes + arrows, charts, SmartArt, and merged-cell ranges), `verbose` (all shapes with width/height plus cell hyperlinks).
 - **Formula extraction**: emits `formulas_map` (formula string -> cell coordinates) via openpyxl/COM. It is enabled by default in `verbose` and can be controlled with `include_formulas_map`.
 - **Formats**: JSON (compact by default, `--pretty` for formatting), YAML, and TOON (optional dependencies).
+- **Backend metadata is opt-in**: shape/chart `provenance`, `approximation_level`, and `confidence` are omitted from serialized output by default. Enable them with `--include-backend-metadata` or `include_backend_metadata=True`.
 - **Table detection tuning**: heuristics can be adjusted dynamically through the API.
 - **Hyperlink extraction**: in `verbose` mode, or with `include_cell_links=True`, cell links are emitted in `links`.
 - **CLI rendering**: in `standard` / `verbose`, PDF and sheet images can be generated when Excel COM is available.
@@ -73,6 +74,7 @@ exstruct input.xlsx --format toon          # TOON (requires python-toon)
 exstruct input.xlsx --sheets-dir sheets/   # write one file per sheet
 exstruct input.xlsx --auto-page-breaks-dir auto_areas/  # COM only; shown only when available
 exstruct input.xlsx --alpha-col            # output column keys as A, B, ..., AA
+exstruct input.xlsx --include-backend-metadata  # include shape/chart backend metadata
 exstruct input.xlsx --mode light           # cells + table candidates only
 exstruct input.xlsx --mode libreoffice     # best-effort extraction of shapes/connectors/charts without COM
 exstruct input.xlsx --pdf --image          # PDF and PNGs (Excel COM required)
@@ -81,6 +83,7 @@ exstruct input.xlsx --pdf --image          # PDF and PNGs (Excel COM required)
 Auto page-break export is available from both the API and the CLI when Excel/COM is available. The CLI exposes `--auto-page-breaks-dir` only in COM-capable environments.
 `mode=libreoffice` rejects `--pdf`, `--image`, and `--auto-page-breaks-dir` early. Use `standard` or `verbose` with Excel COM for those features.
 By default, the CLI keeps legacy 0-based numeric string column keys (`"0"`, `"1"`, ...). Use `--alpha-col` when you need Excel-style keys (`"A"`, `"B"`, ...).
+By default, serialized shape/chart output omits backend metadata (`provenance`, `approximation_level`, `confidence`) to reduce token usage. Use `--include-backend-metadata` or the corresponding Python/MCP option when you need it.
 Note: MCP `exstruct_extract` defaults to `options.alpha_col=true`, which differs from the CLI default (`false`).
 
 ## MCP Server (stdio)
@@ -167,6 +170,7 @@ set_table_detection_params(table_score_threshold=0.3, density_min=0.04)
 # Modes: "light" / "standard" / "verbose"
 wb = extract("input.xlsx", mode="standard")  # standard does not emit links by default
 export(wb, Path("out.json"), pretty=False)  # compact JSON
+export(wb, Path("out.json"), include_backend_metadata=True)  # opt into backend metadata
 
 # Helpful model methods: iteration, indexing, and direct serialization
 first_sheet = wb["Sheet1"]          # get a sheet with __getitem__
@@ -175,6 +179,7 @@ for name, sheet in wb:              # __iter__ yields (name, SheetData)
 wb.save("out.json", pretty=True)    # save WorkbookData based on extension
 first_sheet.save("sheet.json")      # save SheetData the same way
 print(first_sheet.to_yaml())        # YAML string (requires pyyaml)
+print(first_sheet.to_json(include_backend_metadata=True))  # opt in when needed
 
 # ExStructEngine: per-instance configuration
 from exstruct import (
@@ -191,7 +196,10 @@ engine = ExStructEngine(
     options=StructOptions(mode="verbose"),  # verbose includes hyperlinks by default
     output=OutputOptions(
         format=FormatOptions(pretty=True),
-        filters=FilterOptions(include_shapes=False),  # exclude shapes from output
+        filters=FilterOptions(
+            include_shapes=False,
+            include_backend_metadata=True,
+        ),  # opt into backend metadata when needed
         destinations=DestinationOptions(sheets_dir=Path("out_sheets")),  # save per-sheet files
     ),
 )

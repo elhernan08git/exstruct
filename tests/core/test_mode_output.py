@@ -12,7 +12,7 @@ from openpyxl import Workbook
 import pytest
 import xlwings as xw
 
-from exstruct import ConfigError, ExtractionMode, extract, process_excel
+from exstruct import ConfigError, ExStructEngine, ExtractionMode, extract, process_excel
 from exstruct.core.integrate import extract_workbook
 from exstruct.models import Arrow, Chart, Shape
 
@@ -134,6 +134,35 @@ def test_process_excelにモードが伝搬する(tmp_path: Path) -> None:
     _make_basic_book(path)
     process_excel(path, out, mode="light")
     assert out.exists()
+
+
+def test_process_excel_can_enable_backend_metadata(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    """Verify that process_excel configures backend metadata inclusion."""
+
+    captured: dict[str, object] = {}
+
+    def _fake_process(
+        self: ExStructEngine,
+        file_path: Path,
+        output_path: Path | None = None,
+        **_kwargs: object,
+    ) -> None:
+        captured["file_path"] = file_path
+        captured["output_path"] = output_path
+        captured["include_backend_metadata"] = (
+            self.output.filters.include_backend_metadata
+        )
+
+    monkeypatch.setattr("exstruct.ExStructEngine.process", _fake_process)
+    path = tmp_path / "book.xlsx"
+    out = tmp_path / "out.json"
+    _make_basic_book(path)
+    process_excel(path, out, mode="light", include_backend_metadata=True)
+    assert captured["file_path"] == path
+    assert captured["output_path"] == out
+    assert captured["include_backend_metadata"] is True
 
 
 def test_libreofficeモードを受け付ける(

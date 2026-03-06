@@ -129,6 +129,13 @@ class FilterOptions(BaseModel):
         default=None,
         description="Include chart size; None -> auto (verbose=True, others=False).",
     )
+    include_backend_metadata: bool = Field(
+        default=False,
+        description=(
+            "Include shape/chart backend metadata fields "
+            "(provenance, approximation_level, confidence)."
+        ),
+    )
     include_tables: bool = Field(
         default=True, description="Include table candidate ranges."
     )
@@ -435,7 +442,11 @@ class ExStructEngine:
         use_pretty = self.output.format.pretty if pretty is None else pretty
         use_indent = self.output.format.indent if indent is None else indent
         return serialize_workbook(
-            filtered, fmt=use_fmt, pretty=use_pretty, indent=use_indent
+            filtered,
+            fmt=use_fmt,
+            pretty=use_pretty,
+            indent=use_indent,
+            include_backend_metadata=self.output.filters.include_backend_metadata,
         )
 
     def export(
@@ -518,6 +529,7 @@ class ExStructEngine:
                 fmt=chosen_fmt,
                 pretty=self.output.format.pretty if pretty is None else pretty,
                 indent=self.output.format.indent if indent is None else indent,
+                include_backend_metadata=self.output.filters.include_backend_metadata,
             )
 
         if normalized_print_areas_dir is not None:
@@ -534,6 +546,7 @@ class ExStructEngine:
                     include_charts=self.output.filters.include_charts,
                     include_shape_size=include_shape_size,
                     include_chart_size=include_chart_size,
+                    include_backend_metadata=self.output.filters.include_backend_metadata,
                 )
 
         if normalized_auto_page_breaks_dir is not None:
@@ -549,6 +562,7 @@ class ExStructEngine:
                 include_charts=self.output.filters.include_charts,
                 include_shape_size=include_shape_size,
                 include_chart_size=include_chart_size,
+                include_backend_metadata=self.output.filters.include_backend_metadata,
             )
 
         return None

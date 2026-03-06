@@ -131,6 +131,7 @@ def test_run_extract_applies_options(
         indent=2,
         sheets_dir=tmp_path / "sheets",
         print_areas_dir=tmp_path / "print_areas",
+        include_backend_metadata=True,
     )
     request = extract_runner.ExtractRequest(
         xlsx_path=input_path,
@@ -143,6 +144,7 @@ def test_run_extract_applies_options(
     assert capture["indent"] == 2
     assert capture["sheets_dir"] == options.sheets_dir
     assert capture["print_areas_dir"] == options.print_areas_dir
+    assert capture["include_backend_metadata"] is True
 
 
 def test_try_read_workbook_meta_import_error(

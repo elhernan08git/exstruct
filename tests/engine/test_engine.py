@@ -62,7 +62,18 @@ def test_engine_extract_uses_mode(monkeypatch: MonkeyPatch, tmp_path: Path) -> N
 
 
 def _sample_workbook() -> WorkbookData:
-    shape = Shape(id=1, text="x", l=0, t=0, w=10, h=10, type="Rect")
+    shape = Shape(
+        id=1,
+        text="x",
+        l=0,
+        t=0,
+        w=10,
+        h=10,
+        type="Rect",
+        provenance="excel_com",
+        approximation_level="direct",
+        confidence=1.0,
+    )
     chart = Chart(
         name="c1",
         chart_type="Line",
@@ -73,6 +84,9 @@ def _sample_workbook() -> WorkbookData:
         l=0,
         t=0,
         error=None,
+        provenance="libreoffice_uno",
+        approximation_level="partial",
+        confidence=0.8,
     )
     sheet = SheetData(
         rows=[CellRow(r=1, c={"0": "v"}, links={"0": "http://example.com"})],
@@ -92,6 +106,29 @@ def test_engine_serialize_filters_shapes(tmp_path: Path) -> None:
     )
     text = engine.serialize(wb, fmt="json")
     assert '"shapes"' not in text
+
+
+def test_engine_serialize_omits_backend_metadata_by_default() -> None:
+    """Verify that engine serialization hides backend metadata by default."""
+
+    wb = _sample_workbook()
+    engine = ExStructEngine()
+    text = engine.serialize(wb, fmt="json")
+    assert '"provenance"' not in text
+    assert '"approximation_level"' not in text
+    assert '"confidence"' not in text
+
+
+def test_engine_serialize_can_include_backend_metadata() -> None:
+    """Verify that engine serialization can opt into backend metadata."""
+
+    wb = _sample_workbook()
+    engine = ExStructEngine(
+        output=OutputOptions(filters=FilterOptions(include_backend_metadata=True))
+    )
+    text = engine.serialize(wb, fmt="json")
+    assert '"provenance": "excel_com"' in text
+    assert '"provenance": "libreoffice_uno"' in text
 
 
 def test_engine_serialize_filters_tables(tmp_path: Path) -> None:

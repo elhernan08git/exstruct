@@ -43,3 +43,8 @@
 
 - When composing higher-level validators from lower-level ones, keep each validator sound on its own contract; do not suppress a lower-level check just to improve a combined error path unless the caller fully re-implements that check.
 - If a validator has branching for combined invalid options, add a direct unit test for the single-option branch and the combined branch so downstream callers do not mask a contract hole.
+
+## 2026-03-06 docs parity lessons
+
+- When changing a public README example or CLI/API option in `README.md`, update `README.ja.md` in the same change before reporting completion.
+- For token/serialization policy changes, check both English and Japanese quick-start sections for parity on defaults and opt-in flags.

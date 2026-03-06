@@ -47,6 +47,13 @@ class ExtractOptions(BaseModel):
         default=True,
         description="When true, convert CellRow column keys to Excel-style ABC names (A, B, ..., Z, AA, ...) instead of 0-based indices. MCP default is true.",
     )
+    include_backend_metadata: bool = Field(
+        default=False,
+        description=(
+            "When true, include shape/chart backend metadata fields "
+            "(provenance, approximation_level, confidence)."
+        ),
+    )
 
 
 class ExtractRequest(BaseModel):
@@ -128,6 +135,7 @@ def run_extract(
         print_areas_dir=print_areas_dir,
         auto_page_breaks_dir=auto_page_breaks_dir,
         alpha_col=options.alpha_col,
+        include_backend_metadata=options.include_backend_metadata,
     )
     meta, meta_warnings = _try_read_workbook_meta(resolved_input)
     warnings.extend(meta_warnings)

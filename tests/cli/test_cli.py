@@ -24,6 +24,7 @@ _ALLOWED_CLI_FLAGS: set[str] = {
     "-o",
     "--auto-page-breaks-dir",
     "--format",
+    "--include-backend-metadata",
     "--image",
     "--mode",
     "--pdf",
@@ -319,6 +320,24 @@ def test_CLIで無効ファイルは安全終了する(tmp_path: Path) -> None:
     assert result.returncode == 0
     combined_output = _stdout_text(result) + _stderr_text(result)
     assert "not found" in combined_output.lower() or combined_output == ""
+
+
+def test_cli_forwards_include_backend_metadata_flag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Verify that the CLI forwards backend metadata inclusion to process_excel."""
+
+    xlsx = _prepare_sample_excel(tmp_path)
+    out_json = tmp_path / "out.json"
+    captured: dict[str, object] = {}
+
+    def _capture_process_excel(*_args: object, **kwargs: object) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr("exstruct.cli.main.process_excel", _capture_process_excel)
+    result = _run_cli([str(xlsx), "-o", str(out_json), "--include-backend-metadata"])
+    assert result.returncode == 0
+    assert captured["include_backend_metadata"] is True
 
 
 def test_CLI_print_areas_dir_outputs_files(tmp_path: Path) -> None:
