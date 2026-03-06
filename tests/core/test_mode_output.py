@@ -10,7 +10,8 @@ from openpyxl import Workbook
 import pytest
 import xlwings as xw
 
-from exstruct import ExtractionMode, extract, process_excel
+from exstruct import ConfigError, ExtractionMode, extract, process_excel
+from exstruct.core.integrate import extract_workbook
 from exstruct.models import Arrow, Chart, Shape
 
 
@@ -190,6 +191,62 @@ def test_CLIのmode引数バリデーション(tmp_path: Path) -> None:
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     assert result.returncode != 0
+
+
+def test_process_excel_rejects_rendering_in_libreoffice_mode(tmp_path: Path) -> None:
+    path = tmp_path / "book.xlsx"
+    out = tmp_path / "out.json"
+    _make_basic_book(path)
+
+    with pytest.raises(ConfigError, match="does not support PDF/PNG rendering"):
+        process_excel(path, out, mode="libreoffice", pdf=True)
+
+
+def test_process_excel_rejects_auto_page_breaks_in_libreoffice_mode(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "book.xlsx"
+    out = tmp_path / "out.json"
+    _make_basic_book(path)
+
+    with pytest.raises(ConfigError, match="does not support auto page-break export"):
+        process_excel(
+            path,
+            out,
+            mode="libreoffice",
+            auto_page_breaks_dir=tmp_path / "auto",
+        )
+
+
+def test_process_excel_rejects_rendering_and_auto_page_breaks_in_libreoffice_mode(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "book.xlsx"
+    out = tmp_path / "out.json"
+    _make_basic_book(path)
+
+    with pytest.raises(
+        ConfigError,
+        match="does not support PDF/PNG rendering or auto page-break export",
+    ):
+        process_excel(
+            path,
+            out,
+            mode="libreoffice",
+            pdf=True,
+            auto_page_breaks_dir=tmp_path / "auto",
+        )
+
+
+def test_extract_workbook_rejects_auto_page_breaks_in_libreoffice_mode(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ConfigError, match="does not support auto page-break export"):
+        extract_workbook(
+            tmp_path / "book.xlsx",
+            mode="libreoffice",
+            include_auto_page_breaks=True,
+        )
 
 
 def _make_multi_sheet_book(path: Path) -> None:

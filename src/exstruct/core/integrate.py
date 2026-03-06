@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
+from ..constraints import validate_libreoffice_extraction_request
 from ..models import WorkbookData
 from .pipeline import resolve_extraction_inputs, run_extraction_pipeline
 
@@ -43,10 +44,16 @@ def extract_workbook(  # noqa: C901
         WorkbookData: The extracted workbook representation.
 
     Raises:
+        ConfigError: If `mode="libreoffice"` is used with auto page-break extraction.
         ValueError: If `mode` is not one of "light", "libreoffice", "standard", or "verbose".
     """
-    inputs = resolve_extraction_inputs(
+    normalized_file_path = validate_libreoffice_extraction_request(
         file_path,
+        mode=mode,
+        include_auto_page_breaks=include_auto_page_breaks,
+    )
+    inputs = resolve_extraction_inputs(
+        normalized_file_path,
         mode=mode,
         include_cell_links=include_cell_links,
         include_print_areas=include_print_areas,

@@ -63,6 +63,15 @@
 - [x] `libreoffice` mode が best-effort であり strict subset ではないことを明記する
 - [x] rendering と auto page-break が v1 対象外であることを明記する
 
+## Phase 7: CLI LibreOffice Follow-up
+
+- [x] `tasks/feature_spec.md` に CLI / process API の互換性ルールを追記する
+- [x] `engine` / `integrate` に `libreoffice` 非対応オプションの共通バリデーションを追加する
+- [x] CLI help を更新し、`--pdf` / `--image` / `--auto-page-breaks-dir` の制約を明記する
+- [x] `process_excel(...)` / `ExStructEngine.process(...)` / `extract_workbook(...)` の docstring と例を新仕様に揃える
+- [x] CLI / API / extract レイヤーの異常系 test を追加する
+- [x] README / CLI Guide / API docs / test requirements を今回の契約に揃える
+
 ## Review
 
 - 2026-03-06 draw-page / connector follow-up:
@@ -78,6 +87,12 @@
 - 2026-03-06 follow-up:
   - `pytest.mark.libreoffice` smoke test と `RUN_LIBREOFFICE_SMOKE=1` gate を追加
   - LibreOffice runtime あり環境で smoke test を実行して通過
+- 2026-03-06 CLI libreoffice follow-up:
+  - `src/exstruct/constraints.py` を追加し、`mode="libreoffice"` と PDF/PNG rendering / auto page-break export の非対応組み合わせを `ConfigError` で早期拒否する共通ガードを実装
+  - `extract_workbook(...)` / `ExStructEngine.process(...)` / CLI help / README / `docs/cli.md` / `docs/api.md` / `docs/agents/TEST_REQUIREMENTS.md` を同じ契約に揃えた
+  - `uv run pytest tests/core/test_mode_output.py tests/cli/test_cli.py tests/backends/test_auto_page_breaks.py -q` は `28 passed, 1 skipped` で通過したが、既存 COM テスト由来の Windows COM 例外ログが終了後 stderr に出る現象は残っている
+  - `uv run pytest tests/core/test_mode_output.py -k "libreoffice or process_excel_rejects or extract_workbook_rejects" tests/cli/test_cli.py -k "libreoffice" tests/backends/test_auto_page_breaks.py -k "libreoffice or extract_rejects_auto_page_break_flag" -q` は `8 passed`
+  - `uv run task precommit-run` は ruff / ruff-format / mypy すべて通過
 
 - 実装状態: 完了
 - この時点で完了済み:

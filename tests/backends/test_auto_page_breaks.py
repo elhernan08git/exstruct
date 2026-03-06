@@ -1,10 +1,13 @@
 from pathlib import Path
 
 from _pytest.monkeypatch import MonkeyPatch
+import pytest
 
 from exstruct import (
+    ConfigError,
     DestinationOptions,
     ExStructEngine,
+    FilterOptions,
     OutputOptions,
     StructOptions,
     export_auto_page_breaks,
@@ -66,6 +69,20 @@ def test_extract_passes_auto_page_break_flag(
     engine.extract(tmp_path / "book.xlsx")
 
     assert called["include_auto_page_breaks"] is True
+
+
+def test_extract_rejects_auto_page_break_flag_in_libreoffice_mode(
+    tmp_path: Path,
+) -> None:
+    engine = ExStructEngine(
+        options=StructOptions(mode="libreoffice"),
+        output=OutputOptions(
+            filters=FilterOptions(include_auto_print_areas=True),
+        ),
+    )
+
+    with pytest.raises(ConfigError, match="does not support auto page-break export"):
+        engine.extract(tmp_path / "book.xlsx")
 
 
 def test_export_auto_page_breaks_writes_files(tmp_path: Path) -> None:

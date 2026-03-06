@@ -20,6 +20,7 @@ render = cast(Callable[[F], F], pytest.mark.render)
 _ALLOWED_CLI_FLAGS: set[str] = {
     "-f",
     "-o",
+    "--auto-page-breaks-dir",
     "--format",
     "--image",
     "--mode",
@@ -319,6 +320,69 @@ def test_CLI_print_areas_dir_outputs_files(tmp_path: Path) -> None:
     assert files, (
         "No print area files created. "
         f"stdout={_stdout_text(result)} stderr={_stderr_text(result)}"
+    )
+
+
+def test_cli_libreoffice_rejects_pdf_and_image(tmp_path: Path) -> None:
+    xlsx = _prepare_sample_excel(tmp_path)
+    result = _run_cli([str(xlsx), "--mode", "libreoffice", "--pdf", "--image"])
+
+    assert result.returncode == 1
+    combined_output = _stdout_text(result) + _stderr_text(result)
+    assert "does not support PDF/PNG rendering" in combined_output
+
+
+def test_cli_libreoffice_rejects_auto_page_breaks_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    xlsx = _prepare_sample_excel(tmp_path)
+    auto_dir = tmp_path / "auto"
+    monkeypatch.setattr(
+        "exstruct.cli.main.get_com_availability",
+        lambda: ComAvailability(available=True, reason=None),
+    )
+
+    result = _run_cli(
+        [
+            str(xlsx),
+            "--mode",
+            "libreoffice",
+            "--auto-page-breaks-dir",
+            str(auto_dir),
+        ]
+    )
+
+    assert result.returncode == 1
+    combined_output = _stdout_text(result) + _stderr_text(result)
+    assert "does not support auto page-break export" in combined_output
+
+
+def test_cli_libreoffice_rejects_rendering_and_auto_page_breaks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    xlsx = _prepare_sample_excel(tmp_path)
+    auto_dir = tmp_path / "auto"
+    monkeypatch.setattr(
+        "exstruct.cli.main.get_com_availability",
+        lambda: ComAvailability(available=True, reason=None),
+    )
+
+    result = _run_cli(
+        [
+            str(xlsx),
+            "--mode",
+            "libreoffice",
+            "--pdf",
+            "--auto-page-breaks-dir",
+            str(auto_dir),
+        ]
+    )
+
+    assert result.returncode == 1
+    combined_output = _stdout_text(result) + _stderr_text(result)
+    assert (
+        "does not support PDF/PNG rendering or auto page-break export"
+        in combined_output
     )
 
 

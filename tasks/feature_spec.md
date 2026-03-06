@@ -79,6 +79,20 @@ ExtractionMode = Literal["light", "libreoffice", "standard", "verbose"]
 - `PipelineState.fallback_reason` に `LIBREOFFICE_UNAVAILABLE` または `LIBREOFFICE_PIPELINE_FAILED` を設定する。
 - `standard` / `verbose` は従来どおり COM 専用とし、LibreOffice への自動切り替えは行わない。
 
+### 6. CLI / process API の互換性ルール
+
+- `mode="libreoffice"` は抽出専用モードとして扱う。
+- `process_excel(...)` / `ExStructEngine.process(...)` で `mode="libreoffice"` と以下の組み合わせを指定した場合、処理開始前に `ConfigError` を返す。
+  - `pdf=True`
+  - `image=True`
+  - `auto_page_breaks_dir` を指定
+- `extract_workbook(...)` / `ExStructEngine.extract(...)` で `include_auto_page_breaks=True` 相当になった場合も、`mode="libreoffice"` では `ConfigError` を返す。
+- エラーは silent ignore ではなく hard fail に統一する。
+- エラーメッセージは少なくとも以下の意図を含む明確な文言にする。
+  - `libreoffice mode does not support PDF/PNG rendering`
+  - `libreoffice mode does not support auto page-break export`
+  - `use standard/verbose with Excel COM`
+
 ## モデル変更
 
 ### 1. Shape metadata
@@ -323,6 +337,8 @@ pairing ルールは次のとおり。
 - API / CLI / MCP が `mode="libreoffice"` を受け付ける
 - 無効 mode は従来どおり早期エラー
 - `.xls` を `mode="libreoffice"` で指定すると早期エラー
+- `process_excel(...)` / CLI で `mode="libreoffice"` と `pdf` / `image` / `auto_page_breaks_dir` を併用すると早期に `ConfigError` / 非ゼロ終了になる
+- `extract_workbook(...)` / `ExStructEngine.extract(...)` で auto page-break を要求した場合も `mode="libreoffice"` では早期エラーになる
 - `sample/flowchart/sample-shape-connector.xlsx` で connector の `begin_id/end_id` が十分数復元される
 - `sample/basic/sample.xlsx` で chart が 1 件以上返り、title / series / geometry が埋まる
 - LibreOffice 不在時は `rows` / `table_candidates` / `print_areas` / `merged_cells` を保った fallback を返す

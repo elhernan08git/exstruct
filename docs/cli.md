@@ -23,8 +23,8 @@ exstruct INPUT.xlsx --format toon           # TOON output (needs python-toon)
 | `-m, --mode {light,libreoffice,standard,verbose}` | Extraction detail level.<br>- light: cells + table candidates + print areas only.<br>- libreoffice: best-effort non-COM mode for `.xlsx/.xlsm`; adds merged cells, shapes, connectors, and charts when LibreOffice runtime is available.<br>- standard: shapes with text/arrows + charts + print areas via Excel COM.<br>- verbose: all shapes/charts with size + hyperlinks/maps via Excel COM. |
 | `--alpha-col` | Output column keys as Excel-style names (`A`, `B`, ..., `AA`) instead of 0-based numeric keys (`"0"`, `"1"`, ...). Default: disabled (legacy numeric keys). |
 | `--pretty` | Pretty-print JSON (indent=2). |
-| `--image` | Render per-sheet PNGs (requires Excel + COM + `pypdfium2`). |
-| `--pdf` | Render PDF (requires Excel + COM + `pypdfium2`). |
+| `--image` | Render per-sheet PNGs (requires Excel + COM + `pypdfium2`; not supported in `--mode libreoffice`). |
+| `--pdf` | Render PDF (requires Excel + COM + `pypdfium2`; not supported in `--mode libreoffice`). |
 | `--dpi INT` | DPI for rendered images (default: 144). |
 | `--sheets-dir DIR` | Write one file per sheet (format follows `--format`). |
 | `--print-areas-dir DIR` | Write one file per print area (format follows `--format`). |
@@ -60,5 +60,6 @@ exstruct sample.xlsx --pdf --image --dpi 144 -o out.json
 - Optional dependencies are lazy-imported. Missing packages raise a `MissingDependencyError` with install hints.
 - On non-COM environments, prefer `--mode libreoffice` for best-effort rich extraction on `.xlsx/.xlsm`, or `--mode light` for minimal extraction.
 - `--mode libreoffice` is best-effort, not a strict subset of COM output. It does not render PDFs/PNGs and does not compute auto page-break areas in v1.
+- `--mode libreoffice` combined with `--pdf`, `--image`, or `--auto-page-breaks-dir` fails early with a configuration error instead of silently ignoring the option.
 - `--sheets-dir` and `--print-areas-dir` accept existing or new directories (created if missing).
 - `--alpha-col` switches row column keys from legacy numeric strings (`"0"`, `"1"`, ...) to Excel-style keys (`"A"`, `"B"`, ...). CLI default is disabled for backward compatibility.

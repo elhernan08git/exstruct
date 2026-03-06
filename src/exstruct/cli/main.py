@@ -35,7 +35,10 @@ def _add_auto_page_breaks_argument(
     parser.add_argument(
         "--auto-page-breaks-dir",
         type=Path,
-        help="Optional directory to write one file per auto page-break area (COM only).",
+        help=(
+            "Optional directory to write one file per auto page-break area "
+            "(Excel COM only; not supported in libreoffice mode)."
+        ),
     )
 
 
@@ -70,25 +73,35 @@ def build_parser(
     parser.add_argument(
         "--image",
         action="store_true",
-        help="(placeholder) Render PNG alongside JSON",
+        help=(
+            "Render per-sheet PNGs alongside structured output "
+            "(Excel COM only; not supported in libreoffice mode)."
+        ),
     )
     parser.add_argument(
         "--pdf",
         action="store_true",
-        help="(placeholder) Render PDF alongside JSON",
+        help=(
+            "Render PDF alongside structured output "
+            "(Excel COM only; not supported in libreoffice mode)."
+        ),
     )
     parser.add_argument(
         "--dpi",
         type=int,
         default=144,
-        help="DPI for image rendering (placeholder)",
+        help="DPI for image rendering used with --image.",
     )
     parser.add_argument(
         "-m",
         "--mode",
         default="standard",
         choices=["light", "libreoffice", "standard", "verbose"],
-        help="Extraction detail level",
+        help=(
+            "Extraction detail level. libreoffice is a best-effort rich extraction "
+            "mode for .xlsx/.xlsm only and cannot be combined with PDF/PNG rendering "
+            "or auto page-break export."
+        ),
     )
     parser.add_argument(
         "--pretty",

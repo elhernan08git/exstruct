@@ -339,20 +339,25 @@ def process_excel(
         file_path: Input Excel workbook (path string or Path).
         output_path: None for stdout; otherwise, write to file (string or Path).
         out_fmt: json/yaml/yml/toon.
-        image: True to also output PNGs (requires Excel + COM + pypdfium2).
-        pdf: True to also output PDF (requires Excel + COM + pypdfium2).
+        image: True to also output PNGs (requires Excel + COM + pypdfium2 and is
+            not supported in `mode="libreoffice"`).
+        pdf: True to also output PDF (requires Excel + COM + pypdfium2 and is not
+            supported in `mode="libreoffice"`).
         dpi: DPI for image output.
         mode: light/libreoffice/standard/verbose (same meaning as `extract`).
         pretty: Pretty-print JSON.
         indent: JSON indent width.
         sheets_dir: Directory to write per-sheet files (string or Path).
         print_areas_dir: Directory to write per-print-area files (string or Path).
-        auto_page_breaks_dir: Directory to write per-auto-page-break files (COM only).
+        auto_page_breaks_dir: Directory to write per-auto-page-break files (COM only
+            and not supported in `mode="libreoffice"`).
         stream: IO override when output_path is None.
         alpha_col: When True, convert CellRow column keys to Excel-style
             ABC names (A, B, ...) instead of 0-based numeric strings.
 
     Raises:
+        ConfigError: If `mode="libreoffice"` is combined with PDF/PNG rendering or
+            auto page-break export.
         ValueError: If an unsupported format or mode is given.
         PrintAreaError: When exporting auto page breaks without available data.
         RenderError: When rendering fails (Excel/COM/pypdfium2 issues).

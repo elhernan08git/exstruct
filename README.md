@@ -17,7 +17,7 @@ ExStruct reads Excel workbooks and outputs structured data (cells, table candida
 - **Auto page-break export (COM only)**: capture Excel-computed auto page breaks and write per-area JSON/YAML/TOON when requested (CLI option appears only when COM is available).
 - **Formats**: JSON (compact by default, `--pretty` available), YAML, TOON (optional dependencies).
 - **Table detection tuning**: adjust heuristics at runtime via API.
-- **CLI rendering** (Excel required): optional PDF and per-sheet PNGs.
+- **CLI rendering** (Excel COM required): optional PDF and per-sheet PNGs for `standard`/`verbose`.
 - **Graceful fallback**: if Excel COM or the LibreOffice runtime is unavailable, extraction falls back to cells + table candidates + print areas without crashing.
 
 ## Benchmark
@@ -39,7 +39,7 @@ Optional extras:
 
 - YAML: `pip install pyyaml`
 - TOON: `pip install python-toon`
-- Rendering (PDF/PNG): Excel + `pip install pypdfium2 pillow`
+- Rendering (PDF/PNG): Excel + `pip install pypdfium2 pillow` (`mode=libreoffice` is not supported)
 - All extras at once: `pip install exstruct[yaml,toon,render]`
 
 Platform note:
@@ -59,10 +59,11 @@ exstruct input.xlsx --print-areas-dir areas/  # split per print area (if any)
 exstruct input.xlsx --alpha-col           # output column keys as A, B, ..., AA
 exstruct input.xlsx --mode light           # cells + table candidates only
 exstruct input.xlsx --mode libreoffice     # best-effort shapes/connectors/charts without COM
-exstruct input.xlsx --pdf --image          # PDF and PNGs (Excel required)
+exstruct input.xlsx --pdf --image          # PDF and PNGs (Excel COM required)
 ```
 
 Auto page-break exports are available via API and CLI when Excel/COM is available; the CLI exposes `--auto-page-breaks-dir` only in COM-capable environments.
+`mode=libreoffice` rejects `--pdf`, `--image`, and `--auto-page-breaks-dir` early; use `standard` or `verbose` with Excel COM for those features.
 By default, CLI keeps legacy 0-based numeric string column keys (`"0"`, `"1"`, ...). Use `--alpha-col` to emit Excel-style column keys (`"A"`, `"B"`, ...).
 Note: MCP `exstruct_extract` defaults to `options.alpha_col=true`, while CLI defaults to `false` unless `--alpha-col` is specified.
 

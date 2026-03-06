@@ -8,6 +8,10 @@ from typing import Literal, TextIO, TypedDict, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .constraints import (
+    normalize_path,
+    validate_libreoffice_process_request,
+)
 from .core import cells as _cells
 from .core.cells import set_table_detection_params
 from .core.integrate import extract_workbook
@@ -352,7 +356,7 @@ class ExStructEngine:
             Path constructed from the given value.
         """
 
-        return path if isinstance(path, Path) else Path(path)
+        return normalize_path(path)
 
     @classmethod
     def _ensure_optional_path(cls, path: str | Path | None) -> Path | None:
@@ -388,7 +392,7 @@ class ExStructEngine:
             self.output.filters.include_auto_print_areas
             or self.output.destinations.auto_page_breaks_dir is not None
         )
-        normalized_file_path = self._ensure_path(file_path)
+        normalized_file_path = normalize_path(file_path)
         with self._table_params_scope():
             workbook = extract_workbook(
                 normalized_file_path,
@@ -571,8 +575,10 @@ class ExStructEngine:
             file_path: Input Excel workbook path (str or Path).
             output_path: Target file path (str or Path); writes to stdout when None.
             out_fmt: Serialization format for structured output.
-            image: Whether to export PNGs alongside structured output.
+            image: Whether to export PNGs alongside structured output. Requires Excel
+                COM and is not supported in `mode="libreoffice"`.
             pdf: Whether to export a PDF snapshot alongside structured output.
+                Requires Excel COM and is not supported in `mode="libreoffice"`.
             dpi: DPI to use when rendering images.
             mode: Extraction mode; defaults to the engine's StructOptions.mode.
             pretty: Whether to pretty-print JSON output.
@@ -580,17 +586,40 @@ class ExStructEngine:
             sheets_dir: Directory for per-sheet structured outputs (str or Path).
             print_areas_dir: Directory for per-print-area structured outputs (str or Path).
             auto_page_breaks_dir: Directory for auto page-break outputs (str or Path).
+                Requires Excel COM and is not supported in `mode="libreoffice"`.
             stream: Stream override when writing to stdout.
+
+        Raises:
+            ConfigError: If `mode="libreoffice"` is combined with PDF/PNG rendering
+                or auto page-break export.
         """
-        normalized_file_path = self._ensure_path(file_path)
+        chosen_mode = mode or self.options.mode
         normalized_output_path = self._ensure_optional_path(output_path)
         normalized_sheets_dir = self._ensure_optional_path(sheets_dir)
         normalized_print_areas_dir = self._ensure_optional_path(print_areas_dir)
         normalized_auto_page_breaks_dir = self._ensure_optional_path(
             auto_page_breaks_dir
         )
+        effective_auto_page_breaks_dir = (
+            normalized_auto_page_breaks_dir
+            if normalized_auto_page_breaks_dir is not None
+            else self._ensure_optional_path(
+                self.output.destinations.auto_page_breaks_dir
+            )
+        )
+        include_auto_page_breaks = (
+            self.output.filters.include_auto_print_areas
+            or effective_auto_page_breaks_dir is not None
+        )
+        normalized_file_path = validate_libreoffice_process_request(
+            file_path,
+            mode=chosen_mode,
+            include_auto_page_breaks=include_auto_page_breaks,
+            pdf=pdf,
+            image=image,
+        )
 
-        wb = self.extract(normalized_file_path, mode=mode)
+        wb = self.extract(normalized_file_path, mode=chosen_mode)
         chosen_fmt = out_fmt or self.output.format.fmt
         self.export(
             wb,

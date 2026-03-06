@@ -38,3 +38,8 @@
 
 - When mapping OOXML connector semantics into internal arrow fields, verify `head`/`tail` against the source spec instead of inferring from names alone; add separate start/end regression tests.
 - If `__enter__` allocates temp resources before a subprocess probe, clean them up in the exception path as well; `__exit__` is not guaranteed to run on enter failure.
+
+## 2026-03-06 libreoffice validator contract lessons
+
+- When composing higher-level validators from lower-level ones, keep each validator sound on its own contract; do not suppress a lower-level check just to improve a combined error path unless the caller fully re-implements that check.
+- If a validator has branching for combined invalid options, add a direct unit test for the single-option branch and the combined branch so downstream callers do not mask a contract hole.

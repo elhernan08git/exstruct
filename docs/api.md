@@ -78,8 +78,8 @@ process_excel(
 - Core extraction: pandas, openpyxl (installed with the package).
 - YAML export: `pyyaml` (lazy import; missing module raises `MissingDependencyError`).
 - TOON export: `python-toon` (lazy import; missing module raises `MissingDependencyError`).
-- Auto page-break extraction/export: **Excel + COM** required (feature is skipped when COM is unavailable; CLI hides the flag in non-COM environments).
-- Rendering (PDF/PNG): **Excel + COM + `pypdfium2`** are mandatory. Missing Excel/COM or `pypdfium2` surfaces as `RenderError`/`MissingDependencyError`.
+- Auto page-break extraction/export: **Excel + COM** required. `mode="libreoffice"` rejects auto page-break requests with `ConfigError`.
+- Rendering (PDF/PNG): **Excel + COM + `pypdfium2`** are mandatory. Missing Excel/COM or `pypdfium2` surfaces as `RenderError`/`MissingDependencyError`, and `mode="libreoffice"` rejects PDF/PNG requests with `ConfigError`.
 
 ## Auto-generated API (mkdocstrings)
 
@@ -216,6 +216,7 @@ first.save("sheet.yaml")  # requires pyyaml
 - Exception types:
   - `SerializationError`: Unsupported format requested (`serialize_workbook`, export APIs).
   - `MissingDependencyError`: Optional dependency (`pyyaml` / `python-toon` / `pypdfium2`) is missing; message includes install instructions.
+  - `ConfigError`: Invalid option combinations such as `mode="libreoffice"` with PDF/PNG rendering or auto page-break export.
   - `RenderError`: Excel/COM is unavailable or PDF/PNG rendering fails.
   - `PrintAreaError` (ValueError-compatible): `export_auto_page_breaks` invoked when no `auto_print_areas` are available.
   - `OutputError`: Writing output to disk/stream failed (original exception kept in `__cause__`).
