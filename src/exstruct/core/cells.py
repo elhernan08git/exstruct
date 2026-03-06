@@ -1,3 +1,5 @@
+"""Cell, table, color, and formula extraction helpers."""
+
 from __future__ import annotations
 
 from collections import deque

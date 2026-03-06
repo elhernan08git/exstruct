@@ -1,3 +1,5 @@
+"""Tests for extraction pipeline planning and step orchestration."""
+
 import logging
 from pathlib import Path
 
@@ -43,6 +45,8 @@ from exstruct.models import CellRow, PrintArea, Shape
 def test_build_pre_com_pipeline_respects_flags(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Verify that build pre COM pipeline respects flags."""
+
     inputs = ExtractionInputs(
         file_path=tmp_path / "book.xlsx",
         mode="standard",
@@ -65,6 +69,8 @@ def test_build_pre_com_pipeline_respects_flags(
 def test_build_pre_com_pipeline_includes_colors_map_for_light(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Verify that build pre COM pipeline includes colors map for light."""
+
     inputs = ExtractionInputs(
         file_path=tmp_path / "book.xlsx",
         mode="light",
@@ -92,6 +98,8 @@ def test_build_pre_com_pipeline_includes_colors_map_for_light(
 def test_build_pre_com_pipeline_skips_merged_cells_when_disabled(
     tmp_path: Path,
 ) -> None:
+    """Verify that build pre COM pipeline skips merged cells when disabled."""
+
     inputs = ExtractionInputs(
         file_path=tmp_path / "book.xlsx",
         mode="standard",
@@ -112,6 +120,8 @@ def test_build_pre_com_pipeline_skips_merged_cells_when_disabled(
 
 
 def test_build_com_pipeline_respects_flags(tmp_path: Path) -> None:
+    """Verify that build COM pipeline respects flags."""
+
     inputs = ExtractionInputs(
         file_path=tmp_path / "book.xlsx",
         mode="standard",
@@ -138,6 +148,8 @@ def test_build_com_pipeline_respects_flags(tmp_path: Path) -> None:
 def test_build_com_pipeline_excludes_auto_page_breaks_when_disabled(
     tmp_path: Path,
 ) -> None:
+    """Verify that build COM pipeline excludes auto page breaks when disabled."""
+
     inputs = ExtractionInputs(
         file_path=tmp_path / "book.xlsx",
         mode="standard",
@@ -158,6 +170,8 @@ def test_build_com_pipeline_excludes_auto_page_breaks_when_disabled(
 
 
 def test_build_com_pipeline_empty_for_light(tmp_path: Path) -> None:
+    """Verify that build COM pipeline empty for light."""
+
     inputs = ExtractionInputs(
         file_path=tmp_path / "book.xlsx",
         mode="light",
@@ -177,6 +191,8 @@ def test_build_com_pipeline_empty_for_light(tmp_path: Path) -> None:
 
 
 def test_resolve_extraction_inputs_defaults(tmp_path: Path) -> None:
+    """Verify that resolve extraction inputs defaults."""
+
     inputs = resolve_extraction_inputs(
         tmp_path / "book.xlsx",
         mode="standard",
@@ -199,6 +215,8 @@ def test_resolve_extraction_inputs_defaults(tmp_path: Path) -> None:
 
 
 def test_resolve_extraction_inputs_defaults_for_libreoffice(tmp_path: Path) -> None:
+    """Verify that resolve extraction inputs defaults for LibreOffice."""
+
     inputs = resolve_extraction_inputs(
         tmp_path / "book.xlsx",
         mode="libreoffice",
@@ -223,6 +241,8 @@ def test_resolve_extraction_inputs_defaults_for_libreoffice(tmp_path: Path) -> N
 def test_resolve_extraction_inputs_forces_merged_cells_when_excluding_values(
     tmp_path: Path,
 ) -> None:
+    """Verify that resolve extraction inputs forces merged cells when excluding values."""
+
     inputs = resolve_extraction_inputs(
         tmp_path / "book.xlsx",
         mode="light",
@@ -242,6 +262,8 @@ def test_resolve_extraction_inputs_forces_merged_cells_when_excluding_values(
 def test_resolve_extraction_inputs_warns_on_xls_formulas(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
+    """Verify that resolve extraction inputs warns on .xls formulas."""
+
     calls: list[str] = []
 
     def _warn_once(key: str, message: str) -> None:
@@ -275,6 +297,8 @@ def test_resolve_extraction_inputs_warns_on_xls_formulas(
 
 
 def test_resolve_extraction_inputs_rejects_xls_for_libreoffice(tmp_path: Path) -> None:
+    """Verify that resolve extraction inputs rejects .xls for LibreOffice."""
+
     with pytest.raises(ValueError, match="not supported in libreoffice mode"):
         resolve_extraction_inputs(
             tmp_path / "book.xls",
@@ -292,6 +316,8 @@ def test_resolve_extraction_inputs_rejects_xls_for_libreoffice(tmp_path: Path) -
 
 
 def test_resolve_extraction_inputs_sets_ignore_colors(tmp_path: Path) -> None:
+    """Verify that resolve extraction inputs sets ignore colors."""
+
     inputs = resolve_extraction_inputs(
         tmp_path / "book.xlsx",
         mode="verbose",
@@ -311,7 +337,11 @@ def test_resolve_extraction_inputs_sets_ignore_colors(tmp_path: Path) -> None:
 def test_build_cells_tables_workbook_uses_print_areas(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Verify that build cells tables workbook uses print areas."""
+
     def fake_detect_tables(_: Path, __: str, **_kwargs: object) -> list[str]:
+        """Return fixed table candidates for this test."""
+
         return ["A1:B2"]
 
     monkeypatch.setattr(
@@ -352,6 +382,8 @@ def test_build_cells_tables_workbook_uses_print_areas(
 def test_build_cells_tables_workbook_excludes_merged_values_in_rows(
     tmp_path: Path,
 ) -> None:
+    """Verify that build cells tables workbook excludes merged values in rows."""
+
     inputs = ExtractionInputs(
         file_path=tmp_path / "book.xlsx",
         mode="standard",
@@ -376,6 +408,8 @@ def test_build_cells_tables_workbook_excludes_merged_values_in_rows(
 
 
 def test_filter_rows_excluding_merged_values_updates_links() -> None:
+    """Verify that filter rows excluding merged values updates links."""
+
     rows = [
         CellRow(
             r=1,
@@ -390,6 +424,8 @@ def test_filter_rows_excluding_merged_values_updates_links() -> None:
 
 
 def test_filter_rows_excluding_merged_values_drops_empty_rows() -> None:
+    """Verify that filter rows excluding merged values drops empty rows."""
+
     rows = [CellRow(r=1, c={"0": "A"}, links={"0": "L0"})]
     merged_cells = [MergedCellRange(r1=1, c1=0, r2=1, c2=0, v="A")]
     filtered = _filter_rows_excluding_merged_values(rows, merged_cells)
@@ -397,10 +433,14 @@ def test_filter_rows_excluding_merged_values_drops_empty_rows() -> None:
 
 
 def test_filter_rows_excluding_merged_values_returns_when_empty() -> None:
+    """Verify that filter rows excluding merged values returns when empty."""
+
     assert _filter_rows_excluding_merged_values([], []) == []
 
 
 def test_filter_rows_excluding_merged_values_keeps_rows_without_intervals() -> None:
+    """Verify that filter rows excluding merged values keeps rows without intervals."""
+
     rows = [CellRow(r=1, c={"0": "A"})]
     merged_cells = [MergedCellRange(r1=2, c1=0, r2=2, c2=1, v="B")]
     filtered = _filter_rows_excluding_merged_values(rows, merged_cells)
@@ -408,6 +448,8 @@ def test_filter_rows_excluding_merged_values_keeps_rows_without_intervals() -> N
 
 
 def test_filter_rows_excluding_merged_values_drops_links_when_filtered() -> None:
+    """Verify that filter rows excluding merged values drops links when filtered."""
+
     rows = [CellRow(r=1, c={"0": "A", "1": "B"}, links={"0": "L0"})]
     merged_cells = [MergedCellRange(r1=1, c1=0, r2=1, c2=0, v="A")]
     filtered = _filter_rows_excluding_merged_values(rows, merged_cells)
@@ -415,24 +457,34 @@ def test_filter_rows_excluding_merged_values_drops_links_when_filtered() -> None
 
 
 def test_resolve_sheet_colors_map_empty() -> None:
+    """Verify that resolve sheet colors map empty."""
+
     assert _resolve_sheet_colors_map(None, "Sheet1") == {}
 
 
 def test_resolve_sheet_formulas_map_empty() -> None:
+    """Verify that resolve sheet formulas map empty."""
+
     assert _resolve_sheet_formulas_map(None, "Sheet1") == {}
 
 
 def test_merge_intervals_merges_adjacent() -> None:
+    """Verify that merge intervals merges adjacent."""
+
     assert _merge_intervals([(1, 2), (3, 4)]) == [(1, 4)]
 
 
 def test_col_in_intervals_fast_false() -> None:
+    """Verify that col in intervals fast false."""
+
     assert _col_in_intervals(1, [(3, 5)]) is False
 
 
 def test_step_extract_colors_map_openpyxl_sets_data(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
+    """Verify that step extract colors map openpyxl sets data."""
+
     def _fake(
         _backend: OpenpyxlBackend,
         *,
@@ -477,6 +529,8 @@ def test_step_extract_colors_map_openpyxl_sets_data(
 def test_step_extract_colors_map_com_falls_back(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
+    """Verify that step extract colors map COM falls back."""
+
     def _fake_com(
         _backend: ComBackend,
         *,
@@ -538,6 +592,8 @@ def test_step_extract_colors_map_com_falls_back(
 def test_step_extract_auto_page_breaks_com_sets_data(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
+    """Verify that step extract auto page breaks COM sets data."""
+
     def _fake(_: ComBackend) -> dict[str, list[PrintArea]]:
         """
         Return a stub mapping of sheet names to print areas containing a single 1x1 print area for "Sheet1".
@@ -570,6 +626,8 @@ def test_step_extract_auto_page_breaks_com_sets_data(
 def test_build_cells_tables_workbook_fetches_missing_maps(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
+    """Verify that build cells tables workbook fetches missing maps."""
+
     colors_map = WorkbookColorsMap(sheets={})
     formulas_map = WorkbookFormulasMap(sheets={})
 
@@ -632,6 +690,8 @@ def test_build_cells_tables_workbook_fetches_missing_maps(
 def test_step_extract_formulas_map_openpyxl_skips_on_failure(
     tmp_path: Path, monkeypatch: MonkeyPatch, caplog: "pytest.LogCaptureFixture"
 ) -> None:
+    """Verify that step extract formulas map openpyxl skips on failure."""
+
     def _raise(_: OpenpyxlBackend) -> object:
         """
         Always raises a RuntimeError with the message "boom".
@@ -668,6 +728,8 @@ def test_step_extract_formulas_map_openpyxl_skips_on_failure(
 def test_step_extract_formulas_map_com_skips_on_failure(
     tmp_path: Path, monkeypatch: MonkeyPatch, caplog: "pytest.LogCaptureFixture"
 ) -> None:
+    """Verify that step extract formulas map COM skips on failure."""
+
     def _raise(_: ComBackend) -> object:
         """
         Always raises a RuntimeError with message "boom".
@@ -704,12 +766,16 @@ def test_step_extract_formulas_map_com_skips_on_failure(
 def test_filter_rows_excluding_merged_values_returns_rows_when_intervals_empty() -> (
     None
 ):
+    """Verify that filter rows excluding merged values returns rows when intervals empty."""
+
     rows = [CellRow(r=1, c={"0": "A"})]
     merged_cells = [MergedCellRange(r1=3, c1=0, r2=4, c2=1, v="A")]
     assert _filter_rows_excluding_merged_values(rows, merged_cells) == rows
 
 
 def test_resolve_sheet_colors_map_missing_sheet() -> None:
+    """Verify that resolve sheet colors map missing sheet."""
+
     colors_map = WorkbookColorsMap(
         sheets={"Other": SheetColorsMap(sheet_name="Other", colors_map={})}
     )
@@ -717,6 +783,8 @@ def test_resolve_sheet_colors_map_missing_sheet() -> None:
 
 
 def test_resolve_sheet_formulas_map_missing_sheet() -> None:
+    """Verify that resolve sheet formulas map missing sheet."""
+
     formulas_map = WorkbookFormulasMap(
         sheets={"Other": SheetFormulasMap(sheet_name="Other", formulas_map={})}
     )
@@ -724,16 +792,22 @@ def test_resolve_sheet_formulas_map_missing_sheet() -> None:
 
 
 def test_merge_intervals_empty() -> None:
+    """Verify that merge intervals empty."""
+
     assert _merge_intervals([]) == []
 
 
 def test_merge_intervals_keeps_non_overlapping() -> None:
+    """Verify that merge intervals keeps non overlapping."""
+
     assert _merge_intervals([(1, 2), (5, 6)]) == [(1, 2), (5, 6)]
 
 
 def test_step_extract_shapes_com_sets_data(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
+    """Verify that step extract shapes COM sets data."""
+
     shapes_data = {"Sheet1": [object()]}
 
     def _fake(_: object, *, mode: str) -> dict[str, list[object]]:
@@ -773,6 +847,8 @@ def test_step_extract_shapes_com_sets_data(
 def test_step_extract_charts_com_sets_data(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
+    """Verify that step extract charts COM sets data."""
+
     charts = [object()]
 
     def _fake(_: object, *, mode: str) -> list[object]:
@@ -789,6 +865,8 @@ def test_step_extract_charts_com_sets_data(
         return charts
 
     class _Sheet:
+        """Minimal worksheet test double."""
+
         def __init__(self, name: str) -> None:
             """
             Initialize the instance with a display name.
@@ -799,6 +877,8 @@ def test_step_extract_charts_com_sets_data(
             self.name = name
 
     class _Workbook:
+        """Minimal workbook test double."""
+
         sheets = [_Sheet("Sheet1")]
 
     monkeypatch.setattr("exstruct.core.pipeline.get_charts", _fake)
@@ -824,6 +904,8 @@ def test_step_extract_charts_com_sets_data(
 def test_step_extract_print_areas_com_skips_when_present(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
+    """Verify that step extract print areas COM skips when present."""
+
     def _raise(_: ComBackend) -> object:
         """
         Raise a RuntimeError indicating this code path must not be invoked.
@@ -856,6 +938,8 @@ def test_step_extract_print_areas_com_skips_when_present(
 def test_step_extract_print_areas_com_sets_data(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
+    """Verify that step extract print areas COM sets data."""
+
     def _fake(_: ComBackend) -> dict[str, list[PrintArea]]:
         """
         Return a stub mapping of sheet names to print areas containing a single 1x1 print area for "Sheet1".
@@ -888,6 +972,8 @@ def test_step_extract_print_areas_com_sets_data(
 def test_step_extract_colors_map_com_sets_data(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
+    """Verify that step extract colors map COM sets data."""
+
     colors_map = WorkbookColorsMap(sheets={})
 
     def _fake_com(
@@ -950,6 +1036,8 @@ def test_step_extract_colors_map_com_sets_data(
 
 
 def test_run_com_pipeline_executes_steps(tmp_path: Path) -> None:
+    """Verify that run COM pipeline executes steps."""
+
     calls: list[str] = []
 
     def _step(_: ExtractionInputs, artifacts: ExtractionArtifacts, __: object) -> None:
@@ -989,7 +1077,11 @@ def test_run_com_pipeline_executes_steps(tmp_path: Path) -> None:
 def test_run_extraction_pipeline_com_success(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
+    """Verify that run extraction pipeline COM success."""
+
     class _Sheet:
+        """Minimal worksheet test double."""
+
         def __init__(self, name: str) -> None:
             """
             Initialize the instance with a display name.
@@ -1000,6 +1092,8 @@ def test_run_extraction_pipeline_com_success(
             self.name = name
 
     class _Sheets:
+        """Minimal worksheet collection test double."""
+
         def __init__(self) -> None:
             """
             Initialize the object with a single default sheet named "Sheet1".
@@ -1024,6 +1118,8 @@ def test_run_extraction_pipeline_com_success(
             return self._sheets[name]
 
     class _Workbook:
+        """Minimal workbook test double."""
+
         sheets = _Sheets()
 
     def _pre_step(_: ExtractionInputs, artifacts: ExtractionArtifacts) -> None:
@@ -1074,7 +1170,11 @@ def test_run_extraction_pipeline_com_success(
         """
 
         class _Context:
+            """Context-manager test double for workbook access."""
+
             def __enter__(self) -> _Workbook:
+                """Return the test double as the context-manager result."""
+
                 return _Workbook()
 
             def __exit__(
@@ -1083,6 +1183,8 @@ def test_run_extraction_pipeline_com_success(
                 exc: BaseException | None,
                 tb: object | None,
             ) -> bool | None:
+                """Accept context-manager exit arguments without suppressing errors."""
+
                 _ = exc_type
                 _ = exc
                 _ = tb

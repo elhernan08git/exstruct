@@ -1,3 +1,5 @@
+"""Shape, connector, and SmartArt extraction helpers."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator

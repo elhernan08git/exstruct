@@ -1,3 +1,5 @@
+"""Tests for extraction pipeline fallback behavior."""
+
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -11,6 +13,8 @@ from exstruct.errors import FallbackReason
 
 
 def _make_basic_book(path: Path) -> None:
+    """Create basic book for tests."""
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Sheet1"
@@ -22,6 +26,8 @@ def _make_basic_book(path: Path) -> None:
 def test_pipeline_fallback_skip_com_tests(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Verify that pipeline fallback skip COM tests."""
+
     path = tmp_path / "book.xlsx"
     _make_basic_book(path)
     monkeypatch.setenv("SKIP_COM_TESTS", "1")
@@ -62,6 +68,8 @@ def test_pipeline_fallback_com_unavailable(
     monkeypatch.delenv("SKIP_COM_TESTS", raising=False)
 
     def _raise(*_args: object, **_kwargs: object) -> None:
+        """Raise the expected test exception."""
+
         raise RuntimeError("no COM")
 
     monkeypatch.setattr("exstruct.core.pipeline.xlwings_workbook", _raise)
@@ -92,18 +100,24 @@ def test_pipeline_fallback_com_unavailable(
 def test_pipeline_fallback_com_pipeline_failed(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Verify that pipeline fallback COM pipeline failed."""
+
     path = tmp_path / "book.xlsx"
     _make_basic_book(path)
     monkeypatch.delenv("SKIP_COM_TESTS", raising=False)
 
     @contextmanager
     def _dummy_workbook(_path: Path) -> Iterator[object]:
+        """Yield a dummy workbook context manager for this test."""
+
         yield object()
 
     def _raise(
         *_args: object,
         **_kwargs: object,
     ) -> None:
+        """Raise the expected test exception."""
+
         raise RuntimeError("pipeline failed")
 
     monkeypatch.setattr("exstruct.core.pipeline.xlwings_workbook", _dummy_workbook)
@@ -135,10 +149,14 @@ def test_pipeline_fallback_com_pipeline_failed(
 def test_pipeline_fallback_libreoffice_unavailable(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Verify that pipeline fallback LibreOffice unavailable."""
+
     path = tmp_path / "book.xlsx"
     _make_basic_book(path)
 
     def _raise(**_kwargs: object) -> object:
+        """Raise the expected test exception."""
+
         raise LibreOfficeUnavailableError("missing soffice")
 
     monkeypatch.setattr("exstruct.core.pipeline.resolve_rich_backend", _raise)
@@ -168,15 +186,23 @@ def test_pipeline_fallback_libreoffice_unavailable(
 def test_pipeline_fallback_libreoffice_pipeline_failed(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Verify that pipeline fallback LibreOffice pipeline failed."""
+
     path = tmp_path / "book.xlsx"
     _make_basic_book(path)
 
     class _Backend:
+        """Backend test double used by pipeline and mode tests."""
+
         def extract_shapes(self, *, mode: str) -> dict[str, list[object]]:
+            """Provide the shape-extraction behavior for this test double."""
+
             _ = mode
             raise RuntimeError("boom")
 
         def extract_charts(self, *, mode: str) -> dict[str, list[object]]:
+            """Provide the chart-extraction behavior for this test double."""
+
             _ = mode
             return {}
 

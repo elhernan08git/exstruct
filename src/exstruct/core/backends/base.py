@@ -1,3 +1,5 @@
+"""Shared backend protocols, configuration models, and data aliases."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

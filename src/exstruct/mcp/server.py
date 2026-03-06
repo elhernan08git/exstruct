@@ -1,3 +1,5 @@
+"""MCP server bootstrap and tool wiring for ExStruct."""
+
 from __future__ import annotations
 
 import argparse

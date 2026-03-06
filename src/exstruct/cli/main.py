@@ -1,3 +1,5 @@
+"""Command-line interface for running ExStruct extraction."""
+
 from __future__ import annotations
 
 import argparse

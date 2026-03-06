@@ -1,3 +1,5 @@
+"""Tests for the LibreOffice rich extraction backend."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -29,41 +31,61 @@ from exstruct.models import Arrow, Shape
 
 
 class _DummySession:
+    """Dummy LibreOffice session used in tests."""
+
     def __enter__(self) -> _DummySession:
+        """Return the test double as the context-manager result."""
+
         return self
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        """Accept context-manager exit arguments without suppressing errors."""
+
         _ = exc_type
         _ = exc
         _ = tb
 
     def load_workbook(self, file_path: Path) -> object:
+        """Return a lightweight workbook token for tests."""
+
         return {"file_path": str(file_path)}
 
     def close_workbook(self, workbook: object) -> None:
+        """Accept a workbook token without additional cleanup."""
+
         _ = workbook
 
     def extract_chart_geometries(
         self, file_path: Path
     ) -> dict[str, list[LibreOfficeChartGeometry]]:
+        """Provide chart geometry data for this test double."""
+
         _ = file_path
         return {}
 
     def extract_draw_page_shapes(
         self, file_path: Path
     ) -> dict[str, list[LibreOfficeDrawPageShape]]:
+        """Provide draw-page shape data for this test double."""
+
         _ = file_path
         return {}
 
 
 def _dummy_session_factory() -> LibreOfficeSession:
+    """Return a dummy LibreOffice session test double."""
+
     return cast(LibreOfficeSession, _DummySession())
 
 
 class _ChartGeometrySession(_DummySession):
+    """Session double that returns fixed chart geometry data."""
+
     def extract_chart_geometries(
         self, file_path: Path
     ) -> dict[str, list[LibreOfficeChartGeometry]]:
+        """Provide chart geometry data for this test double."""
+
         _ = file_path
         return {
             "Sheet1": [
@@ -80,21 +102,31 @@ class _ChartGeometrySession(_DummySession):
 
 
 def _chart_geometry_session_factory() -> LibreOfficeSession:
+    """Return a LibreOffice session double with chart geometries."""
+
     return cast(LibreOfficeSession, _ChartGeometrySession())
 
 
 class _DrawPageSession(_DummySession):
+    """Session double that returns fixed draw-page shapes."""
+
     def __init__(self, payload: dict[str, list[LibreOfficeDrawPageShape]]) -> None:
+        """Initialize the test double."""
+
         self._payload = payload
 
     def extract_draw_page_shapes(
         self, file_path: Path
     ) -> dict[str, list[LibreOfficeDrawPageShape]]:
+        """Provide draw-page shape data for this test double."""
+
         _ = file_path
         return self._payload
 
 
 def test_libreoffice_backend_extracts_connector_graph_from_sample() -> None:
+    """Verify that LibreOffice backend extracts connector graph from sample."""
+
     backend = LibreOfficeRichBackend(
         Path("sample/flowchart/sample-shape-connector.xlsx"),
         session_factory=_dummy_session_factory,
@@ -114,6 +146,8 @@ def test_libreoffice_backend_extracts_connector_graph_from_sample() -> None:
 
 
 def test_libreoffice_backend_extracts_chart_from_sample() -> None:
+    """Verify that LibreOffice backend extracts chart from sample."""
+
     backend = LibreOfficeRichBackend(
         Path("sample/basic/sample.xlsx"),
         session_factory=_chart_geometry_session_factory,
@@ -133,6 +167,8 @@ def test_libreoffice_backend_extracts_chart_from_sample() -> None:
 def test_libreoffice_backend_uses_draw_page_shapes_without_ooxml(
     monkeypatch: MonkeyPatch,
 ) -> None:
+    """Verify that LibreOffice backend uses draw page shapes without OOXML."""
+
     payload = {
         "Sheet1": [
             LibreOfficeDrawPageShape(
@@ -194,6 +230,8 @@ def test_libreoffice_backend_uses_draw_page_shapes_without_ooxml(
 def test_libreoffice_backend_prefers_ooxml_refs_over_uno_direct_refs(
     monkeypatch: MonkeyPatch,
 ) -> None:
+    """Verify that LibreOffice backend prefers OOXML refs over uno direct refs."""
+
     payload = {
         "Sheet1": [
             LibreOfficeDrawPageShape(
@@ -291,6 +329,8 @@ def test_libreoffice_backend_prefers_ooxml_refs_over_uno_direct_refs(
 
 
 def test_ooxml_connector_tail_end_maps_to_begin_arrow_style() -> None:
+    """Verify that OOXML connector tail end maps to begin arrow style."""
+
     node = ElementTree.fromstring(
         """
         <xdr:cxnSp xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"
@@ -318,6 +358,8 @@ def test_ooxml_connector_tail_end_maps_to_begin_arrow_style() -> None:
 
 
 def test_ooxml_connector_head_end_maps_to_end_arrow_style() -> None:
+    """Verify that OOXML connector head end maps to end arrow style."""
+
     node = ElementTree.fromstring(
         """
         <xdr:cxnSp xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"
@@ -347,6 +389,8 @@ def test_ooxml_connector_head_end_maps_to_end_arrow_style() -> None:
 def test_libreoffice_session_cleans_temp_profile_on_enter_failure(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
+    """Verify that LibreOffice session cleans temp profile on enter failure."""
+
     removed_paths: list[Path] = []
     created_dir = tmp_path / "lo-profile"
     soffice_path = tmp_path / "soffice.exe"
@@ -355,16 +399,22 @@ def test_libreoffice_session_cleans_temp_profile_on_enter_failure(
     python_path.write_text("", encoding="utf-8")
 
     def _fake_mkdtemp(*, prefix: str, temp_dir: str | None = None) -> str:
+        """Provide a fake mkdtemp implementation for this test."""
+
         _ = prefix
         _ = temp_dir
         created_dir.mkdir(parents=True, exist_ok=True)
         return str(created_dir)
 
     def _fake_rmtree(path: Path | str, *, ignore_errors: bool) -> None:
+        """Provide a fake rmtree implementation for this test."""
+
         _ = ignore_errors
         removed_paths.append(Path(path))
 
     def _fake_run(*_args: object, **_kwargs: object) -> object:
+        """Provide a fake run implementation for this test."""
+
         raise subprocess.TimeoutExpired(cmd="soffice --version", timeout=1.0)
 
     monkeypatch.setattr(
@@ -393,26 +443,40 @@ def test_libreoffice_session_cleans_temp_profile_on_enter_failure(
 def test_libreoffice_session_exit_cleans_profile_even_if_kill_wait_times_out(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
+    """Verify that LibreOffice session exit cleans profile even if kill wait times out."""
+
     cleaned_paths: list[Path] = []
 
     class _FakeProcess:
+        """Fake LibreOffice process used to test shutdown behavior."""
+
         def __init__(self) -> None:
+            """Initialize the test double."""
+
             self.terminate_called = False
             self.kill_called = False
             self.wait_calls = 0
 
         def terminate(self) -> None:
+            """Record a termination request on the fake process."""
+
             self.terminate_called = True
 
         def wait(self, *, timeout: float) -> None:
+            """Simulate waiting for the fake process and raise a timeout."""
+
             _ = timeout
             self.wait_calls += 1
             raise subprocess.TimeoutExpired(cmd="soffice", timeout=5.0)
 
         def kill(self) -> None:
+            """Record a forced kill request on the fake process."""
+
             self.kill_called = True
 
     def _fake_cleanup(path: Path) -> None:
+        """Provide a fake cleanup implementation for this test."""
+
         cleaned_paths.append(path)
 
     session = LibreOfficeSession(

@@ -1,3 +1,5 @@
+"""LibreOffice-backed rich shape and chart extraction helpers."""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
@@ -24,6 +26,8 @@ class LibreOfficeRichBackend(RichBackend):
         *,
         session_factory: Callable[[], LibreOfficeSession] = LibreOfficeSession.from_env,
     ) -> None:
+        """Store the workbook path and session factory used for lazy LibreOffice extraction."""
+
         self.file_path = file_path
         self._session_factory = session_factory
         self._runtime_checked = False
@@ -31,6 +35,18 @@ class LibreOfficeRichBackend(RichBackend):
         self._draw_page_shapes: dict[str, list[LibreOfficeDrawPageShape]] | None = None
 
     def extract_shapes(self, *, mode: str) -> dict[str, list[Shape | Arrow | SmartArt]]:
+        """Extract LibreOffice-mode shapes and connectors for each worksheet.
+
+        Args:
+            mode: Requested extraction mode. Only ``"libreoffice"`` is supported.
+
+        Returns:
+            Mapping of sheet names to emitted shape, arrow, and SmartArt models.
+
+        Raises:
+            ValueError: If a non-LibreOffice mode is requested.
+        """
+
         if mode != "libreoffice":
             raise ValueError("LibreOfficeRichBackend only supports libreoffice mode.")
         self._ensure_runtime()
@@ -58,6 +74,18 @@ class LibreOfficeRichBackend(RichBackend):
         return shape_data
 
     def extract_charts(self, *, mode: str) -> dict[str, list[Chart]]:
+        """Extract LibreOffice-mode charts for each worksheet.
+
+        Args:
+            mode: Requested extraction mode. Only ``"libreoffice"`` is supported.
+
+        Returns:
+            Mapping of sheet names to emitted chart models.
+
+        Raises:
+            ValueError: If a non-LibreOffice mode is requested.
+        """
+
         if mode != "libreoffice":
             raise ValueError("LibreOfficeRichBackend only supports libreoffice mode.")
         self._ensure_runtime()
@@ -105,6 +133,8 @@ class LibreOfficeRichBackend(RichBackend):
         return chart_data
 
     def _ensure_runtime(self) -> None:
+        """Probe the LibreOffice runtime once and cache successful availability."""
+
         if self._runtime_checked:
             return
         with self._session_factory() as session:
@@ -113,6 +143,8 @@ class LibreOfficeRichBackend(RichBackend):
         self._runtime_checked = True
 
     def _read_chart_geometries(self) -> dict[str, list[LibreOfficeChartGeometry]]:
+        """Load and cache chart geometry snapshots from the LibreOffice session."""
+
         if self._chart_geometries is not None:
             return self._chart_geometries
         with self._session_factory() as session:
@@ -125,6 +157,8 @@ class LibreOfficeRichBackend(RichBackend):
         return self._chart_geometries
 
     def _read_draw_page_shapes(self) -> dict[str, list[LibreOfficeDrawPageShape]]:
+        """Load and cache draw-page shape snapshots from the LibreOffice session."""
+
         if self._draw_page_shapes is not None:
             return self._draw_page_shapes
         with self._session_factory() as session:
@@ -141,6 +175,16 @@ def _build_shapes_from_ooxml(
     shapes: Sequence[OoxmlShapeInfo],
     connectors: Sequence[OoxmlConnectorInfo],
 ) -> list[Shape | Arrow | SmartArt]:
+    """Build emitted shape models directly from OOXML drawing metadata.
+
+    Args:
+        shapes: Parsed OOXML shape candidates.
+        connectors: Parsed OOXML connector candidates.
+
+    Returns:
+        Emitted shape and arrow models derived from the OOXML drawing anchors.
+    """
+
     emitted: list[Shape | Arrow | SmartArt] = []
     drawing_to_shape_id: dict[int, int] = {}
     shape_boxes: dict[int, _ShapeBox] = {}
@@ -212,6 +256,17 @@ def _build_shapes_from_draw_page(
     drawing_shapes: Sequence[OoxmlShapeInfo],
     drawing_connectors: Sequence[OoxmlConnectorInfo],
 ) -> list[Shape | Arrow | SmartArt]:
+    """Merge UNO draw-page snapshots with OOXML drawing metadata.
+
+    Args:
+        snapshots: LibreOffice draw-page snapshots for one worksheet.
+        drawing_shapes: OOXML shape candidates for the worksheet.
+        drawing_connectors: OOXML connector candidates for the worksheet.
+
+    Returns:
+        Emitted shape and arrow models built from the combined metadata.
+    """
+
     emitted: list[Shape | Arrow | SmartArt] = []
     snapshot_shapes = [snapshot for snapshot in snapshots if not snapshot.is_connector]
     snapshot_connectors = [snapshot for snapshot in snapshots if snapshot.is_connector]
@@ -349,6 +404,19 @@ def _resolve_connector(
     shape_name_to_id: dict[str, int],
     shape_boxes: dict[int, _ShapeBox],
 ) -> tuple[int | None, int | None, str, float]:
+    """Resolve connector endpoints using OOXML refs, UNO refs, or geometry heuristics.
+
+    Args:
+        connector_info: OOXML connector metadata when available.
+        uno_connector: LibreOffice draw-page connector snapshot when available.
+        drawing_to_shape_id: Mapping from OOXML drawing ids to emitted shape ids.
+        shape_name_to_id: Mapping from UNO shape names to emitted shape ids.
+        shape_boxes: Bounding boxes used for heuristic endpoint matching.
+
+    Returns:
+        Tuple of begin id, end id, approximation label, and confidence score.
+    """
+
     if connector_info is not None:
         start_id = connector_info.connection.start_drawing_id
         end_id = connector_info.connection.end_drawing_id
@@ -387,6 +455,8 @@ def _resolve_direction(
     connector_info: OoxmlConnectorInfo | None,
     uno_connector: LibreOfficeDrawPageShape | None,
 ) -> str | None:
+    """Infer connector direction from OOXML deltas or UNO geometry."""
+
     if connector_info is None:
         return _direction_from_box(uno_connector)
     dx = connector_info.direction_dx
@@ -402,6 +472,8 @@ def _connector_endpoints(
     connector_info: OoxmlConnectorInfo | None,
     uno_connector: LibreOfficeDrawPageShape | None,
 ) -> tuple[tuple[float, float] | None, tuple[float, float] | None]:
+    """Return connector endpoints for heuristic endpoint matching."""
+
     if connector_info is not None:
         left = connector_info.ref.left
         top = connector_info.ref.top
@@ -428,6 +500,8 @@ def _connector_endpoints(
 def _nearest_shape_id(
     point: tuple[float, float] | None, shape_boxes: dict[int, _ShapeBox]
 ) -> int | None:
+    """Return the closest emitted shape id to a point."""
+
     if point is None or not shape_boxes:
         return None
     x, y = point
@@ -442,6 +516,8 @@ def _nearest_shape_id(
 
 
 def _distance_to_box(x: float, y: float, box: _ShapeBox) -> float:
+    """Compute the Euclidean distance from a point to a shape box."""
+
     dx = max(box.left - x, 0.0, x - box.right)
     dy = max(box.top - y, 0.0, y - box.bottom)
     return math.hypot(dx, dy)
@@ -455,6 +531,8 @@ def _to_shape_box(
     width: int | None,
     height: int | None,
 ) -> _ShapeBox | None:
+    """Build a shape box when complete rectangle geometry is available."""
+
     if left is None or top is None or width is None or height is None:
         return None
     return _ShapeBox(
@@ -470,6 +548,8 @@ def _match_shape_infos(
     snapshots: Sequence[LibreOfficeDrawPageShape],
     candidates: Sequence[OoxmlShapeInfo],
 ) -> list[OoxmlShapeInfo | None]:
+    """Match UNO shape snapshots to OOXML shape metadata."""
+
     return [
         candidates[index] if index is not None else None
         for index in _match_by_name_then_order(
@@ -483,6 +563,8 @@ def _match_connector_infos(
     snapshots: Sequence[LibreOfficeDrawPageShape],
     candidates: Sequence[OoxmlConnectorInfo],
 ) -> list[OoxmlConnectorInfo | None]:
+    """Match UNO connector snapshots to OOXML connector metadata."""
+
     return [
         candidates[index] if index is not None else None
         for index in _match_by_name_then_order(
@@ -496,6 +578,8 @@ def _match_by_name_then_order(
     snapshot_names: Sequence[str],
     candidate_names: Sequence[str],
 ) -> list[int | None]:
+    """Match snapshot names to candidate names by name first, then by order."""
+
     matches: list[int | None] = [None] * len(snapshot_names)
     unused = list(range(len(candidate_names)))
 
@@ -526,6 +610,8 @@ def _match_by_name_then_order(
 
 
 def _shape_type_from_uno(shape_type: str | None) -> str | None:
+    """Collapse a fully qualified UNO shape type to its leaf name."""
+
     if not shape_type:
         return None
     return shape_type.rsplit(".", 1)[-1]
@@ -534,6 +620,8 @@ def _shape_type_from_uno(shape_type: str | None) -> str | None:
 def _direction_from_box(
     connector: LibreOfficeDrawPageShape | None,
 ) -> str | None:
+    """Infer a connector direction from its bounding-box delta."""
+
     if connector is None:
         return None
     if connector.width is None or connector.height is None:
@@ -548,6 +636,8 @@ def _match_chart_geometries(
     charts: Sequence[object],
     candidates: Sequence[LibreOfficeChartGeometry],
 ) -> list[LibreOfficeChartGeometry | None]:
+    """Match OOXML chart entries to LibreOffice chart geometry candidates."""
+
     matches: list[LibreOfficeChartGeometry | None] = [None] * len(charts)
     unused = list(range(len(candidates)))
 
@@ -582,6 +672,8 @@ def _match_chart_geometries(
 
 
 def _first_int(*values: int | None, default: int) -> int:
+    """Return the first non-``None`` integer or the provided default."""
+
     for value in values:
         if value is not None:
             return value
@@ -589,6 +681,8 @@ def _first_int(*values: int | None, default: int) -> int:
 
 
 def _first_optional_int(*values: int | None) -> int | None:
+    """Return the first non-``None`` integer, if any."""
+
     for value in values:
         if value is not None:
             return value
@@ -596,6 +690,8 @@ def _first_optional_int(*values: int | None) -> int | None:
 
 
 def _first_optional_float(*values: float | None) -> float | None:
+    """Return the first non-``None`` float, if any."""
+
     for value in values:
         if value is not None:
             return value
@@ -603,9 +699,13 @@ def _first_optional_float(*values: float | None) -> float | None:
 
 
 class _ShapeBox:
+    """Axis-aligned bounding box for emitted shapes."""
+
     def __init__(
         self, *, shape_id: int, left: float, top: float, right: float, bottom: float
     ) -> None:
+        """Store bounding-box coordinates for emitted shape matching."""
+
         self.shape_id = shape_id
         self.left = left
         self.top = top

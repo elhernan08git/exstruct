@@ -1,3 +1,5 @@
+"""Pytest configuration and environment gating for the test suite."""
+
 from __future__ import annotations
 
 from functools import lru_cache

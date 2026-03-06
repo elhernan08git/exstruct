@@ -1,3 +1,5 @@
+"""UNO bridge helper executed inside the LibreOffice Python runtime."""
+
 from __future__ import annotations
 
 import argparse
@@ -12,64 +14,128 @@ _HMM_PER_POINT = 2540.0 / 72.0
 
 
 class _ServiceManager(Protocol):
+    """Protocol for UNO service-manager access used by the bridge."""
+
     def createInstanceWithContext(  # noqa: N802
         self, service_name: str, context: object
-    ) -> object: ...
+    ) -> object:
+        """Create a UNO service instance using the provided component context."""
+
+        ...
 
 
 class _UnoContext(Protocol):
+    """Protocol for a UNO component context."""
+
     ServiceManager: _ServiceManager
 
 
 class _UnoResolver(Protocol):
-    def resolve(self, connection: str) -> object: ...
+    """Protocol for resolving remote UNO component contexts."""
+
+    def resolve(self, connection: str) -> object:
+        """Resolve a remote UNO component context from a connection string."""
+
+        ...
 
 
 class _Desktop(Protocol):
+    """Protocol for the UNO desktop service used to load documents."""
+
     def loadComponentFromURL(  # noqa: N802
         self,
         url: str,
         target: str,
         search_flags: int,
         properties: tuple[object, ...],
-    ) -> object: ...
+    ) -> object:
+        """Load a document component from a UNO file URL."""
+
+        ...
 
 
 class _NamedContainer(Protocol):
-    def getElementNames(self) -> list[str]: ...  # noqa: N802
+    """Protocol for UNO containers that expose named members."""
+
+    def getElementNames(self) -> list[str]:  # noqa: N802
+        """Return the member names exposed by the container."""
+
+        ...
 
 
 class _DrawPage(Protocol):
-    def getCount(self) -> int: ...  # noqa: N802
+    """Protocol for a LibreOffice draw page."""
 
-    def getByIndex(self, index: int) -> object: ...  # noqa: N802
+    def getCount(self) -> int:  # noqa: N802
+        """Return the number of drawable items on the page."""
+
+        ...
+
+    def getByIndex(self, index: int) -> object:  # noqa: N802
+        """Return a drawable item by index."""
+
+        ...
 
 
 class _ShapeLike(Protocol):
-    def getShapeType(self) -> str: ...  # noqa: N802
+    """Protocol for UNO draw objects that report a shape type."""
+
+    def getShapeType(self) -> str:  # noqa: N802
+        """Return the UNO shape type name."""
+
+        ...
 
 
 class _Sheet(Protocol):
-    def getCharts(self) -> _NamedContainer: ...  # noqa: N802
+    """Protocol for spreadsheet sheets exposed through UNO."""
 
-    def getDrawPage(self) -> _DrawPage: ...  # noqa: N802
+    def getCharts(self) -> _NamedContainer:  # noqa: N802
+        """Return the chart container for the sheet."""
+
+        ...
+
+    def getDrawPage(self) -> _DrawPage:  # noqa: N802
+        """Return the draw page for the sheet."""
+
+        ...
 
 
 class _Sheets(Protocol):
-    def getElementNames(self) -> list[str]: ...  # noqa: N802
+    """Protocol for the spreadsheet sheet collection."""
 
-    def getByName(self, name: str) -> object: ...  # noqa: N802
+    def getElementNames(self) -> list[str]:  # noqa: N802
+        """Return the sheet names in workbook order."""
+
+        ...
+
+    def getByName(self, name: str) -> object:  # noqa: N802
+        """Return a sheet object by name."""
+
+        ...
 
 
 class _SpreadsheetDocument(Protocol):
-    def getSheets(self) -> _Sheets: ...  # noqa: N802
+    """Protocol for a loaded spreadsheet document."""
 
-    def close(self, deliver_ownership: bool) -> None: ...
+    def getSheets(self) -> _Sheets:  # noqa: N802
+        """Return the workbook sheet collection."""
 
-    def dispose(self) -> None: ...
+        ...
+
+    def close(self, deliver_ownership: bool) -> None:
+        """Request a graceful close for the spreadsheet document."""
+
+        ...
+
+    def dispose(self) -> None:
+        """Dispose of the spreadsheet document immediately."""
+
+        ...
 
 
 def main() -> int:
+    """Run the bridge entry point and print a JSON payload for the requested extraction."""
+
     args = _parse_args()
     ctx = _resolve_context(args.host, args.port)
     desktop = cast(
@@ -89,6 +155,8 @@ def main() -> int:
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the LibreOffice bridge."""
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", required=True)
     parser.add_argument("--port", required=True, type=int)
@@ -98,6 +166,8 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _resolve_context(host: str, port: int) -> _UnoContext:
+    """Resolve the remote LibreOffice UNO component context for the requested host and port."""
+
     local_ctx = uno.getComponentContext()
     resolver = cast(
         _UnoResolver,
@@ -121,6 +191,8 @@ def _resolve_context(host: str, port: int) -> _UnoContext:
 
 
 def _load_document(desktop: _Desktop, file_path: Path) -> _SpreadsheetDocument:
+    """Load the target spreadsheet document through the UNO desktop service."""
+
     from com.sun.star.beans import PropertyValue
 
     props: list[object] = []
@@ -141,6 +213,8 @@ def _load_document(desktop: _Desktop, file_path: Path) -> _SpreadsheetDocument:
 
 
 def _extract_chart_payload(doc: _SpreadsheetDocument) -> dict[str, object]:
+    """Collect chart geometry payloads from workbook draw pages."""
+
     sheets_payload: dict[str, list[dict[str, object]]] = {}
     sheets = doc.getSheets()
     for sheet_name in sheets.getElementNames():
@@ -173,6 +247,8 @@ def _extract_chart_payload(doc: _SpreadsheetDocument) -> dict[str, object]:
 
 
 def _extract_draw_page_payload(doc: _SpreadsheetDocument) -> dict[str, object]:
+    """Collect non-chart draw-page payloads from workbook sheets."""
+
     sheets_payload: dict[str, list[dict[str, object]]] = {}
     sheets = doc.getSheets()
     for sheet_name in sheets.getElementNames():
@@ -206,6 +282,8 @@ def _extract_draw_page_payload(doc: _SpreadsheetDocument) -> dict[str, object]:
 
 
 def _safe_attr(obj: object, name: str) -> object:
+    """Read a UNO attribute or helper method while suppressing lookup failures."""
+
     if name == "getShapeType":
         try:
             return cast(_ShapeLike, obj).getShapeType()
@@ -218,6 +296,8 @@ def _safe_attr(obj: object, name: str) -> object:
 
 
 def _close_document(doc: _SpreadsheetDocument) -> None:
+    """Close a UNO spreadsheet document, falling back to dispose when needed."""
+
     try:
         doc.close(True)
     except Exception:  # noqa: BLE001
@@ -228,6 +308,8 @@ def _close_document(doc: _SpreadsheetDocument) -> None:
 
 
 def _safe_shape_name(obj: object, attr_name: str) -> str | None:
+    """Return the related shape name referenced by a UNO connector endpoint."""
+
     try:
         ref = getattr(obj, attr_name)
     except Exception:  # noqa: BLE001
@@ -239,12 +321,16 @@ def _safe_shape_name(obj: object, attr_name: str) -> str | None:
 
 
 def _hmm_to_points(value: object) -> int | None:
+    """Convert hundredths of millimetres to rounded point units."""
+
     if not isinstance(value, int | float):
         return None
     return int(round(float(value) / _HMM_PER_POINT))
 
 
 def _rotation_to_degrees(value: object) -> float | None:
+    """Convert LibreOffice rotation units to degrees."""
+
     if not isinstance(value, int | float):
         return None
     return float(value) / 100.0

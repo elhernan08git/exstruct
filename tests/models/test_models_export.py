@@ -1,3 +1,5 @@
+"""Tests for model serialization and export helpers."""
+
 from collections.abc import Callable
 from importlib import util
 import json
@@ -39,10 +41,14 @@ def _sheet() -> SheetData:
 
 
 def _workbook() -> WorkbookData:
+    """Return a sample workbook for model export tests."""
+
     return WorkbookData(book_name="sample.xlsx", sheets={"Sheet1": _sheet()})
 
 
 def test_workbook_to_json_pretty() -> None:
+    """Verify that workbook to JSON pretty."""
+
     wb = _workbook()
     text = wb.to_json(pretty=True)
     assert '"book_name": "sample.xlsx"' in text
@@ -50,6 +56,8 @@ def test_workbook_to_json_pretty() -> None:
 
 
 def test_sheet_to_json_compact() -> None:
+    """Verify that sheet to JSON compact."""
+
     sheet = _sheet()
     text = sheet.to_json()
     assert '"r": 1' in text
@@ -57,6 +65,8 @@ def test_sheet_to_json_compact() -> None:
 
 
 def test_save_respects_suffix(tmp_path: Path) -> None:
+    """Verify that save respects suffix."""
+
     wb = _workbook()
     dest = tmp_path / "out.json"
     wb.save(dest, pretty=False)
@@ -72,6 +82,8 @@ def test_save_respects_suffix(tmp_path: Path) -> None:
 
 
 def test_save_unsupported_format_raises(tmp_path: Path) -> None:
+    """Verify that save unsupported format raises."""
+
     wb = _workbook()
     bad = tmp_path / "out.bin"
     with pytest.raises(ValueError):
@@ -81,6 +93,8 @@ def test_save_unsupported_format_raises(tmp_path: Path) -> None:
 # cast to _SkipIf satisfies mypy strict mode for decorator typing
 @cast(_SkipIf, pytest.mark.skipif(not HAS_PYYAML, reason="pyyaml not installed"))
 def test_sheet_to_yaml_roundtrip() -> None:
+    """Verify that sheet to YAML roundtrip."""
+
     sheet = _sheet()
     text = sheet.to_yaml()
     assert "table_candidates" in text
@@ -89,12 +103,16 @@ def test_sheet_to_yaml_roundtrip() -> None:
 
 @cast(_SkipIf, pytest.mark.skipif(not HAS_PYYAML, reason="pyyaml not installed"))
 def test_workbook_to_yaml() -> None:
+    """Verify that workbook to YAML."""
+
     wb = _workbook()
     text = wb.to_yaml()
     assert "book_name: sample.xlsx" in text
 
 
 def test_sheet_to_toon_dependency() -> None:
+    """Verify that sheet to TOON dependency."""
+
     sheet = _sheet()
     if HAS_TOON:
         text = sheet.to_toon()
@@ -122,6 +140,8 @@ def test_workbook_iter_and_getitem() -> None:
 
 
 def test_sheet_json_includes_smartart_nodes() -> None:
+    """Verify that sheet JSON includes smartart nodes."""
+
     smartart = SmartArt(
         id=1,
         text="sa",
@@ -167,6 +187,8 @@ def test_sheet_json_includes_merged_cells_schema() -> None:
 
 
 def test_model_dump_exclude_none_omits_backend_metadata() -> None:
+    """Verify that model dump exclude none omits backend metadata."""
+
     shape = Shape(id=1, text="shape", l=0, t=0)
     chart = Chart(
         name="chart",

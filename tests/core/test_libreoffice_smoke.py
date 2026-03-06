@@ -1,3 +1,5 @@
+"""Smoke tests for LibreOffice-mode extraction."""
+
 from pathlib import Path
 
 import pytest
@@ -9,6 +11,8 @@ pytestmark = pytest.mark.libreoffice
 
 
 def test_libreoffice_mode_smoke_extracts_sample_shapes_and_charts() -> None:
+    """Verify that LibreOffice mode smoke extracts sample shapes and charts."""
+
     flowchart = extract(
         Path("sample/flowchart/sample-shape-connector.xlsx"),
         mode="libreoffice",

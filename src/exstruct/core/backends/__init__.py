@@ -1,3 +1,5 @@
+"""Backend implementations exposed by the core extraction pipeline."""
+
 from __future__ import annotations
 
 from .base import Backend

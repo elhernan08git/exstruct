@@ -1,3 +1,5 @@
+"""Engine option models and orchestration helpers for ExStruct."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator

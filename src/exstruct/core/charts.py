@@ -1,3 +1,5 @@
+"""Chart extraction helpers built on Excel COM."""
+
 from __future__ import annotations
 
 import logging

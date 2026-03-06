@@ -1,3 +1,5 @@
+"""LibreOffice runtime session management and UNO payload parsing helpers."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -22,6 +24,8 @@ class LibreOfficeUnavailableError(RuntimeError):
 
 @dataclass(frozen=True)
 class LibreOfficeChartGeometry:
+    """Best-effort chart geometry captured from LibreOffice draw pages."""
+
     name: str
     persist_name: str | None = None
     left: int | None = None
@@ -32,6 +36,8 @@ class LibreOfficeChartGeometry:
 
 @dataclass(frozen=True)
 class LibreOfficeDrawPageShape:
+    """Best-effort shape snapshot captured from a LibreOffice draw page."""
+
     name: str
     shape_type: str | None = None
     text: str = ""
@@ -47,6 +53,8 @@ class LibreOfficeDrawPageShape:
 
 @dataclass(frozen=True)
 class LibreOfficeSessionConfig:
+    """Configuration required to launch and query a LibreOffice session."""
+
     soffice_path: Path
     startup_timeout_sec: float
     exec_timeout_sec: float
@@ -57,6 +65,8 @@ class LibreOfficeSession:
     """Best-effort runtime guard for LibreOffice-backed extraction."""
 
     def __init__(self, config: LibreOfficeSessionConfig) -> None:
+        """Initialize a session wrapper for a specific LibreOffice runtime configuration."""
+
         self.config = config
         self._temp_profile_dir: Path | None = None
         self._soffice_process: subprocess.Popen[str] | None = None
@@ -89,6 +99,15 @@ class LibreOfficeSession:
         )
 
     def __enter__(self) -> LibreOfficeSession:
+        """Launch a headless LibreOffice process and wait for its UNO socket.
+
+        Returns:
+            The initialized session instance.
+
+        Raises:
+            LibreOfficeUnavailableError: If the runtime executable, bundled Python, version probe, or UNO socket startup is unavailable.
+        """
+
         if not self.config.soffice_path.exists():
             raise LibreOfficeUnavailableError(
                 f"LibreOffice runtime is unavailable: '{self.config.soffice_path}' was not found."
@@ -163,6 +182,8 @@ class LibreOfficeSession:
         return self
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        """Terminate the LibreOffice process and remove the temporary user profile."""
+
         _ = exc_type
         _ = exc
         _ = tb
@@ -210,6 +231,20 @@ class LibreOfficeSession:
         *,
         kind: Literal["charts", "draw-page"],
     ) -> object:
+        """Run the bundled bridge script and cache the parsed payload.
+
+        Args:
+            file_path: Workbook to inspect through LibreOffice.
+            kind: Extraction kind to request from the bridge script.
+
+        Returns:
+            Decoded JSON payload returned by the bridge script.
+
+        Raises:
+            LibreOfficeUnavailableError: If the bundled Python or bridge invocation is unavailable or times out.
+            RuntimeError: If the bridge fails or returns invalid JSON.
+        """
+
         if self._accept_port is None or self._python_path is None:
             raise RuntimeError("LibreOfficeSession must be entered before extraction.")
         cache_key = f"{kind}:{file_path.resolve()}"
@@ -263,6 +298,8 @@ class LibreOfficeSession:
 
 
 def _which_soffice() -> Path | None:
+    """Return the first discoverable ``soffice`` executable on ``PATH``."""
+
     for candidate in ("soffice", "soffice.exe"):
         resolved = shutil.which(candidate)
         if resolved:
@@ -271,6 +308,8 @@ def _which_soffice() -> Path | None:
 
 
 def _get_timeout_from_env(name: str, *, default: float) -> float:
+    """Read a positive finite timeout value from the environment."""
+
     raw = os.getenv(name)
     if raw is None:
         return default
@@ -284,6 +323,8 @@ def _get_timeout_from_env(name: str, *, default: float) -> float:
 
 
 def _get_optional_path(name: str) -> Path | None:
+    """Return an optional path from the environment when set."""
+
     raw = os.getenv(name)
     if raw is None or not raw.strip():
         return None
@@ -291,6 +332,8 @@ def _get_optional_path(name: str) -> Path | None:
 
 
 def _resolve_python_path(soffice_path: Path) -> Path | None:
+    """Resolve the LibreOffice-bundled Python executable path."""
+
     override = os.getenv("EXSTRUCT_LIBREOFFICE_PYTHON_PATH")
     if override:
         return Path(override)
@@ -303,6 +346,8 @@ def _resolve_python_path(soffice_path: Path) -> Path | None:
 
 
 def _reserve_tcp_port() -> int:
+    """Reserve an ephemeral localhost TCP port for the UNO socket."""
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
@@ -315,6 +360,8 @@ def _wait_for_socket(
     timeout_sec: float,
     process: subprocess.Popen[str] | None,
 ) -> None:
+    """Wait for the LibreOffice UNO socket to accept connections."""
+
     deadline = time.monotonic() + timeout_sec
     while time.monotonic() < deadline:
         if process is not None and process.poll() is not None:
@@ -335,6 +382,8 @@ def _wait_for_socket(
 
 
 def _cleanup_profile_dir(path: Path) -> None:
+    """Retry cleanup of a temporary LibreOffice profile directory."""
+
     deadline = time.monotonic() + 5.0
     while True:
         shutil.rmtree(path, ignore_errors=True)
@@ -346,6 +395,8 @@ def _cleanup_profile_dir(path: Path) -> None:
 def _parse_chart_payload(
     payload: object,
 ) -> dict[str, list[LibreOfficeChartGeometry]]:
+    """Validate and coerce a raw bridge payload into chart geometries by sheet."""
+
     if not isinstance(payload, dict):
         raise RuntimeError(
             "LibreOffice UNO chart extraction returned a non-object payload."
@@ -386,6 +437,8 @@ def _parse_chart_payload(
 def _parse_draw_page_payload(
     payload: object,
 ) -> dict[str, list[LibreOfficeDrawPageShape]]:
+    """Validate and coerce a raw bridge payload into draw-page shapes by sheet."""
+
     if not isinstance(payload, dict):
         raise RuntimeError(
             "LibreOffice UNO draw-page extraction returned a non-object payload."
@@ -435,6 +488,8 @@ def _parse_draw_page_payload(
 
 
 def _coerce_int(value: object) -> int | None:
+    """Coerce numeric payload values to integers."""
+
     if isinstance(value, int):
         return value
     if isinstance(value, float):
@@ -443,6 +498,8 @@ def _coerce_int(value: object) -> int | None:
 
 
 def _coerce_rotation(value: object) -> float | None:
+    """Coerce numeric payload values to floating-point rotation angles."""
+
     if isinstance(value, int | float):
         return float(value)
     return None

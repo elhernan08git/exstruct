@@ -1,3 +1,5 @@
+"""Tests for extraction mode behavior and output paths."""
+
 import os
 from pathlib import Path
 import subprocess
@@ -46,6 +48,8 @@ def _ensure_excel() -> None:
 
 
 def _make_shapes_book(path: Path) -> None:
+    """Create shapes book for tests."""
+
     app = xw.App(add_book=False, visible=False)
     try:
         wb = app.books.add()
@@ -68,10 +72,14 @@ def _make_shapes_book(path: Path) -> None:
 def test_lightモードではCOMに触れずセルとテーブルのみ(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Test that light mode avoids COM and returns only cell and table data."""
+
     path = tmp_path / "book.xlsx"
     _make_basic_book(path)
 
     def _boom(*_a: object, **_k: object) -> Never:
+        """Raise if the COM path is accessed during the test."""
+
         raise AssertionError("COM should not be accessed in light mode")
 
     monkeypatch.setattr("exstruct.core.pipeline.xlwings_workbook", _boom)
@@ -83,6 +91,8 @@ def test_lightモードではCOMに触れずセルとテーブルのみ(
 
 @pytest.mark.com  # type: ignore[misc]
 def test_standardモードはテキストなし図形を除外する(tmp_path: Path) -> None:
+    """Test that standard mode excludes textless non-arrow shapes."""
+
     _ensure_excel()
     path = tmp_path / "shapes.xlsx"
     _make_shapes_book(path)
@@ -101,6 +111,8 @@ def test_standardモードはテキストなし図形を除外する(tmp_path: P
 
 @pytest.mark.com  # type: ignore[misc]
 def test_verboseモードでは全図形と幅高さが出力される(tmp_path: Path) -> None:
+    """Test that verbose mode emits all shapes with width and height."""
+
     _ensure_excel()
     path = tmp_path / "shapes.xlsx"
     _make_shapes_book(path)
@@ -115,6 +127,8 @@ def test_verboseモードでは全図形と幅高さが出力される(tmp_path:
 
 
 def test_process_excelにモードが伝搬する(tmp_path: Path) -> None:
+    """Test that process_excel forwards the selected mode."""
+
     path = tmp_path / "book.xlsx"
     out = tmp_path / "out.json"
     _make_basic_book(path)
@@ -125,15 +139,23 @@ def test_process_excelにモードが伝搬する(tmp_path: Path) -> None:
 def test_libreofficeモードを受け付ける(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
+    """Test that LibreOffice mode is accepted by extraction."""
+
     path = tmp_path / "book.xlsx"
     _make_basic_book(path)
 
     class _Backend:
+        """Backend test double used by pipeline and mode tests."""
+
         def extract_shapes(self, *, mode: str) -> dict[str, list[Shape]]:
+            """Provide the shape-extraction behavior for this test double."""
+
             _ = mode
             return {"Sheet1": [Shape(id=1, text="s", l=0, t=0)]}
 
         def extract_charts(self, *, mode: str) -> dict[str, list[Chart]]:
+            """Provide the chart-extraction behavior for this test double."""
+
             _ = mode
             return {
                 "Sheet1": [
@@ -161,6 +183,8 @@ def test_libreofficeモードを受け付ける(
 
 
 def test_invalidモードはエラーになる(tmp_path: Path) -> None:
+    """Test that invalid extraction modes raise errors."""
+
     path = tmp_path / "book.xlsx"
     _make_basic_book(path)
     with pytest.raises(ValueError):
@@ -172,6 +196,8 @@ def test_invalidモードはエラーになる(tmp_path: Path) -> None:
 
 
 def test_libreofficeモードはxlsを拒否する(tmp_path: Path) -> None:
+    """Test that LibreOffice mode rejects .xls inputs."""
+
     path = tmp_path / "book.xls"
     path.write_bytes(b"not-a-real-xls")
     with pytest.raises(ValueError, match="not supported in libreoffice mode"):
@@ -179,6 +205,8 @@ def test_libreofficeモードはxlsを拒否する(tmp_path: Path) -> None:
 
 
 def test_CLIのmode引数バリデーション(tmp_path: Path) -> None:
+    """Test CLI mode argument validation."""
+
     path = tmp_path / "book.xlsx"
     _make_basic_book(path)
     cmd = [
@@ -194,6 +222,8 @@ def test_CLIのmode引数バリデーション(tmp_path: Path) -> None:
 
 
 def test_process_excel_rejects_rendering_in_libreoffice_mode(tmp_path: Path) -> None:
+    """Verify that process excel rejects rendering in LibreOffice mode."""
+
     path = tmp_path / "book.xlsx"
     out = tmp_path / "out.json"
     _make_basic_book(path)
@@ -205,6 +235,8 @@ def test_process_excel_rejects_rendering_in_libreoffice_mode(tmp_path: Path) -> 
 def test_process_excel_rejects_auto_page_breaks_in_libreoffice_mode(
     tmp_path: Path,
 ) -> None:
+    """Verify that process excel rejects auto page breaks in LibreOffice mode."""
+
     path = tmp_path / "book.xlsx"
     out = tmp_path / "out.json"
     _make_basic_book(path)
@@ -221,6 +253,8 @@ def test_process_excel_rejects_auto_page_breaks_in_libreoffice_mode(
 def test_process_excel_rejects_rendering_and_auto_page_breaks_in_libreoffice_mode(
     tmp_path: Path,
 ) -> None:
+    """Verify that process excel rejects rendering and auto page breaks in LibreOffice mode."""
+
     path = tmp_path / "book.xlsx"
     out = tmp_path / "out.json"
     _make_basic_book(path)
@@ -241,6 +275,8 @@ def test_process_excel_rejects_rendering_and_auto_page_breaks_in_libreoffice_mod
 def test_extract_workbook_rejects_auto_page_breaks_in_libreoffice_mode(
     tmp_path: Path,
 ) -> None:
+    """Verify that extract workbook rejects auto page breaks in LibreOffice mode."""
+
     with pytest.raises(ConfigError, match="does not support auto page-break export"):
         extract_workbook(
             tmp_path / "book.xlsx",
@@ -250,6 +286,8 @@ def test_extract_workbook_rejects_auto_page_breaks_in_libreoffice_mode(
 
 
 def _make_multi_sheet_book(path: Path) -> None:
+    """Create multi sheet book for tests."""
+
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "Sheet1"
@@ -262,6 +300,8 @@ def _make_multi_sheet_book(path: Path) -> None:
 def test_process_excel_defaults_to_stdout(
     tmp_path: Path, capsys: CaptureFixture[str]
 ) -> None:
+    """Verify that process excel defaults to stdout."""
+
     path = tmp_path / "book.xlsx"
     _make_basic_book(path)
 
@@ -272,6 +312,8 @@ def test_process_excel_defaults_to_stdout(
 
 
 def test_process_excel_sheets_dir_output(tmp_path: Path) -> None:
+    """Verify that process excel sheets dir output."""
+
     path = tmp_path / "book.xlsx"
     _make_multi_sheet_book(path)
     sheets_dir = tmp_path / "sheets"
@@ -286,6 +328,8 @@ def test_process_excel_sheets_dir_output(tmp_path: Path) -> None:
 
 
 def test_CLI_defaults_to_stdout(tmp_path: Path) -> None:
+    """Verify that c l i defaults to stdout."""
+
     path = tmp_path / "book.xlsx"
     _make_basic_book(path)
     cmd = [

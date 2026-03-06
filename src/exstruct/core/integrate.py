@@ -1,3 +1,5 @@
+"""High-level workbook extraction entry points."""
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -1,3 +1,5 @@
+"""OOXML drawing parsers for shapes, connectors, and charts."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -41,6 +43,8 @@ _SHAPE_TYPE_MAP = {
 
 @dataclass(frozen=True)
 class DrawingShapeRef:
+    """Geometric and identity metadata for a drawing object anchor."""
+
     drawing_id: int
     name: str
     kind: Literal["shape", "connector", "chart"]
@@ -52,6 +56,8 @@ class DrawingShapeRef:
 
 @dataclass(frozen=True)
 class DrawingConnectorRef:
+    """Connection metadata linking a connector to drawing ids."""
+
     drawing_id: int
     start_drawing_id: int | None
     end_drawing_id: int | None
@@ -59,6 +65,8 @@ class DrawingConnectorRef:
 
 @dataclass(frozen=True)
 class OoxmlChartInfo:
+    """Chart metadata extracted from OOXML chart and drawing parts."""
+
     name: str
     chart_type: str
     title: str | None
@@ -73,6 +81,8 @@ class OoxmlChartInfo:
 
 @dataclass(frozen=True)
 class OoxmlShapeInfo:
+    """Shape metadata extracted from OOXML drawing anchors."""
+
     ref: DrawingShapeRef
     text: str = ""
     shape_type: str | None = None
@@ -85,6 +95,8 @@ class OoxmlShapeInfo:
 
 @dataclass(frozen=True)
 class OoxmlConnectorInfo:
+    """Connector metadata extracted from OOXML drawing anchors."""
+
     ref: DrawingShapeRef
     connection: DrawingConnectorRef
     text: str = ""
@@ -97,6 +109,8 @@ class OoxmlConnectorInfo:
 
 @dataclass(frozen=True)
 class SheetDrawingData:
+    """Grouped OOXML drawing artifacts for a worksheet."""
+
     shapes: list[OoxmlShapeInfo] = field(default_factory=list)
     connectors: list[OoxmlConnectorInfo] = field(default_factory=list)
     charts: list[OoxmlChartInfo] = field(default_factory=list)
@@ -115,6 +129,8 @@ def read_sheet_drawings(file_path: Path) -> dict[str, SheetDrawingData]:
 
 
 def _iter_sheet_xml_paths(archive: ZipFile) -> list[tuple[str, str]]:
+    """Return workbook sheet names paired with their OOXML worksheet paths."""
+
     workbook_xml = archive.read("xl/workbook.xml")
     workbook_root = ElementTree.fromstring(workbook_xml)
     rel_map = _read_relationships(archive, "xl/_rels/workbook.xml.rels")
@@ -129,6 +145,8 @@ def _iter_sheet_xml_paths(archive: ZipFile) -> list[tuple[str, str]]:
 
 
 def _resolve_sheet_drawing_path(archive: ZipFile, sheet_xml_path: str) -> str | None:
+    """Resolve the drawing part referenced by a worksheet, if any."""
+
     rels_path = _rels_path(sheet_xml_path)
     if rels_path not in archive.namelist():
         return None
@@ -141,6 +159,8 @@ def _resolve_sheet_drawing_path(archive: ZipFile, sheet_xml_path: str) -> str | 
 
 
 def _parse_sheet_drawing(archive: ZipFile, drawing_path: str) -> SheetDrawingData:
+    """Parse shapes, connectors, and charts from a drawing part."""
+
     root = ElementTree.fromstring(archive.read(drawing_path))
     rel_map = {}
     drawing_rels_path = _rels_path(drawing_path)
@@ -175,6 +195,8 @@ def _parse_sheet_drawing(archive: ZipFile, drawing_path: str) -> SheetDrawingDat
 
 
 def _parse_shape_node(node: ElementTree.Element) -> OoxmlShapeInfo | None:
+    """Parse an OOXML shape node into an ``OoxmlShapeInfo`` record."""
+
     c_nv_pr = node.find("xdr:nvSpPr/xdr:cNvPr", _NS)
     if c_nv_pr is None:
         return None
@@ -205,6 +227,8 @@ def _parse_shape_node(node: ElementTree.Element) -> OoxmlShapeInfo | None:
 
 
 def _parse_connector_node(node: ElementTree.Element) -> OoxmlConnectorInfo | None:
+    """Parse an OOXML connector node into an ``OoxmlConnectorInfo`` record."""
+
     c_nv_pr = node.find("xdr:nvCxnSpPr/xdr:cNvPr", _NS)
     if c_nv_pr is None:
         return None
@@ -255,6 +279,8 @@ def _parse_connector_node(node: ElementTree.Element) -> OoxmlConnectorInfo | Non
 def _parse_chart_node(
     archive: ZipFile, node: ElementTree.Element, rel_map: dict[str, str]
 ) -> OoxmlChartInfo | None:
+    """Parse an OOXML graphic-frame chart node into chart metadata."""
+
     c_nv_pr = node.find("xdr:nvGraphicFramePr/xdr:cNvPr", _NS)
     if c_nv_pr is None:
         return None
@@ -284,6 +310,8 @@ def _parse_chart_node(
 
 
 def _extract_chart_type(chart_root: ElementTree.Element) -> str:
+    """Extract the ExStruct chart type label from a chart part."""
+
     plot_area = chart_root.find("c:chart/c:plotArea", _NS)
     if plot_area is None:
         return "unknown"
@@ -312,11 +340,15 @@ def _extract_chart_type(chart_root: ElementTree.Element) -> str:
 
 
 def _extract_chart_title(chart_root: ElementTree.Element) -> str | None:
+    """Extract a chart title from a chart part."""
+
     title = chart_root.find("c:chart/c:title", _NS)
     return _extract_chart_text(title)
 
 
 def _extract_y_axis_title(chart_root: ElementTree.Element) -> str:
+    """Extract the first value-axis title from a chart part."""
+
     for axis in chart_root.findall(".//c:valAx", _NS):
         title = _extract_chart_text(axis.find("c:title", _NS))
         if title:
@@ -325,6 +357,8 @@ def _extract_y_axis_title(chart_root: ElementTree.Element) -> str:
 
 
 def _extract_y_axis_range(chart_root: ElementTree.Element) -> list[float]:
+    """Extract the first explicit value-axis min/max range."""
+
     for axis in chart_root.findall(".//c:valAx", _NS):
         scaling = axis.find("c:scaling", _NS)
         if scaling is None:
@@ -342,6 +376,8 @@ def _extract_y_axis_range(chart_root: ElementTree.Element) -> list[float]:
 
 
 def _extract_chart_series(chart_root: ElementTree.Element) -> list[ChartSeries]:
+    """Extract chart series labels and ranges from a chart part."""
+
     plot_area = chart_root.find("c:chart/c:plotArea", _NS)
     if plot_area is None:
         return []
@@ -389,6 +425,8 @@ def _extract_chart_series(chart_root: ElementTree.Element) -> list[ChartSeries]:
 
 
 def _extract_chart_text(node: ElementTree.Element | None) -> str | None:
+    """Collect text content from chart title and rich text nodes."""
+
     if node is None:
         return None
     texts = [
@@ -402,6 +440,8 @@ def _extract_chart_text(node: ElementTree.Element | None) -> str | None:
 
 
 def _format_shape_type(node: ElementTree.Element) -> str | None:
+    """Map an OOXML preset geometry into an ExStruct shape type label."""
+
     sp_pr = node.find("xdr:spPr", _NS)
     if sp_pr is None:
         return None
@@ -421,6 +461,8 @@ def _format_shape_type(node: ElementTree.Element) -> str | None:
 def _parse_sp_geometry(
     sp_pr: ElementTree.Element | None,
 ) -> tuple[int | None, int | None, int | None, int | None, float | None, bool, bool]:
+    """Parse position, size, rotation, and flips from a shape properties node."""
+
     if sp_pr is None:
         return (None, None, None, None, None, False, False)
     return _parse_xfrm_geometry(sp_pr.find("a:xfrm", _NS))
@@ -429,6 +471,8 @@ def _parse_sp_geometry(
 def _parse_xfrm_geometry(
     xfrm: ElementTree.Element | None,
 ) -> tuple[int | None, int | None, int | None, int | None, float | None, bool, bool]:
+    """Parse position, size, rotation, and flips from an ``xfrm`` node."""
+
     if xfrm is None:
         return (None, None, None, None, None, False, False)
     off = xfrm.find("a:off", _NS)
@@ -450,6 +494,8 @@ def _parse_xfrm_geometry(
 
 
 def _read_relationships(archive: ZipFile, rels_path: str) -> dict[str, str]:
+    """Read a relationships part into a relationship-id to target map."""
+
     root = ElementTree.fromstring(archive.read(rels_path))
     base_path = _base_dir(_source_path_from_rels(rels_path))
     rel_map: dict[str, str] = {}
@@ -463,6 +509,8 @@ def _read_relationships(archive: ZipFile, rels_path: str) -> dict[str, str]:
 
 
 def _source_path_from_rels(rels_path: str) -> str:
+    """Recover the source part path that owns a relationships part."""
+
     rels = PurePosixPath(rels_path)
     if rels.parent.name != "_rels":
         return rels_path
@@ -471,15 +519,21 @@ def _source_path_from_rels(rels_path: str) -> str:
 
 
 def _rels_path(source_path: str) -> str:
+    """Return the relationships part path for a source part."""
+
     path = PurePosixPath(source_path)
     return str(path.parent / "_rels" / f"{path.name}.rels")
 
 
 def _base_dir(path: str) -> str:
+    """Return the POSIX parent directory for a zip path."""
+
     return str(PurePosixPath(path).parent)
 
 
 def _normalize_zip_path(base_dir: str, target: str) -> str:
+    """Normalize a relative OOXML zip target against a base directory."""
+
     base = PurePosixPath(base_dir)
     normalized = base.joinpath(PurePosixPath(target)).as_posix()
     parts: list[str] = []
@@ -495,6 +549,8 @@ def _normalize_zip_path(base_dir: str, target: str) -> str:
 
 
 def _extract_text(node: ElementTree.Element | None) -> str:
+    """Extract concatenated text from a drawing text body."""
+
     if node is None:
         return ""
     texts = [text.text for text in node.findall(".//a:t", _NS) if text.text]
@@ -502,6 +558,8 @@ def _extract_text(node: ElementTree.Element | None) -> str:
 
 
 def _emu_attr_to_points(node: ElementTree.Element | None, attr: str) -> int | None:
+    """Convert an EMU-valued XML attribute to rounded point units."""
+
     if node is None:
         return None
     raw = node.attrib.get(attr)
@@ -514,6 +572,8 @@ def _emu_attr_to_points(node: ElementTree.Element | None, attr: str) -> int | No
 
 
 def _int_attr(node: ElementTree.Element | None, attr: str) -> int | None:
+    """Parse an integer XML attribute when present."""
+
     if node is None:
         return None
     raw = node.attrib.get(attr)
@@ -526,6 +586,8 @@ def _int_attr(node: ElementTree.Element | None, attr: str) -> int | None:
 
 
 def _float_attr(node: ElementTree.Element | None, attr: str) -> float | None:
+    """Parse a floating-point XML attribute when present."""
+
     if node is None:
         return None
     raw = node.attrib.get(attr)
@@ -538,4 +600,6 @@ def _float_attr(node: ElementTree.Element | None, attr: str) -> float | None:
 
 
 def _local_name(tag: str) -> str:
+    """Return the local XML name without its namespace."""
+
     return tag.rsplit("}", 1)[-1]

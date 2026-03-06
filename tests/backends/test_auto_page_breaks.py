@@ -1,3 +1,5 @@
+"""Tests for auto page-break extraction and export behavior."""
+
 from pathlib import Path
 
 from _pytest.monkeypatch import MonkeyPatch
@@ -74,6 +76,8 @@ def test_extract_passes_auto_page_break_flag(
 def test_extract_rejects_auto_page_break_flag_in_libreoffice_mode(
     tmp_path: Path,
 ) -> None:
+    """Verify that extract rejects auto page break flag in LibreOffice mode."""
+
     engine = ExStructEngine(
         options=StructOptions(mode="libreoffice"),
         output=OutputOptions(
@@ -86,6 +90,8 @@ def test_extract_rejects_auto_page_break_flag_in_libreoffice_mode(
 
 
 def test_export_auto_page_breaks_writes_files(tmp_path: Path) -> None:
+    """Verify that export auto page breaks writes files."""
+
     area = PrintArea(r1=1, c1=0, r2=2, c2=1)
     sheet = SheetData(auto_print_areas=[area])
     wb = WorkbookData(book_name="b.xlsx", sheets={"Sheet1": sheet})
@@ -96,6 +102,8 @@ def test_export_auto_page_breaks_writes_files(tmp_path: Path) -> None:
 
 
 def test_export_auto_page_breaks_raises_when_empty(tmp_path: Path) -> None:
+    """Verify that export auto page breaks raises when empty."""
+
     wb = WorkbookData(book_name="b.xlsx", sheets={"Sheet1": SheetData()})
     try:
         export_auto_page_breaks(wb, tmp_path)
@@ -107,16 +115,26 @@ def test_export_auto_page_breaks_raises_when_empty(tmp_path: Path) -> None:
 
 
 def test_com_backend_extract_auto_page_breaks_handles_failure() -> None:
+    """Verify that COM backend extract auto page breaks handles failure."""
+
     class _FailingSheetApi:
+        """Failing sheet API double used in tests."""
+
         @property
         def DisplayPageBreaks(self) -> bool:
+            """Raise when page-break display state is requested."""
+
             raise RuntimeError("boom")
 
     class _FailingSheet:
+        """Worksheet double that exposes the failing sheet API."""
+
         name = "Sheet1"
         api = _FailingSheetApi()
 
     class _DummyWorkbook:
+        """Workbook double that wraps the failing sheet test case."""
+
         sheets = [_FailingSheet()]
 
     backend = ComBackend(_DummyWorkbook())

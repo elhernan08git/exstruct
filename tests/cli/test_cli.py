@@ -1,3 +1,5 @@
+"""CLI integration tests for ExStruct."""
+
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from importlib import util
@@ -38,6 +40,8 @@ class CliResult(BaseModel):
 
 
 def _toon_available() -> bool:
+    """Return whether the TOON dependency is importable."""
+
     try:
         import toon  # noqa: F401
 
@@ -257,6 +261,8 @@ def _temporary_env(env: dict[str, str] | None) -> Iterator[None]:
 
 
 def test_CLIでjson出力が成功する(tmp_path: Path) -> None:
+    """Test that the CLI writes JSON output successfully."""
+
     xlsx = _prepare_sample_excel(tmp_path)
     out_json = tmp_path / "out.json"
     result = _run_cli([str(xlsx), "-o", str(out_json)])
@@ -267,6 +273,8 @@ def test_CLIでjson出力が成功する(tmp_path: Path) -> None:
 
 
 def test_CLIでyamlやtoon指定は未サポート(tmp_path: Path) -> None:
+    """Test YAML and TOON CLI handling based on optional dependencies."""
+
     xlsx = _prepare_sample_excel(tmp_path)
     out_yaml = tmp_path / "out.yaml"
     result = _run_cli([str(xlsx), "-o", str(out_yaml), "-f", "yaml"])
@@ -289,6 +297,8 @@ def test_CLIでyamlやtoon指定は未サポート(tmp_path: Path) -> None:
 
 @render
 def test_CLIでpdfと画像が出力される(tmp_path: Path) -> None:
+    """Test that the CLI exports PDF and PNG artifacts."""
+
     xlsx = _prepare_sample_excel(tmp_path)
     out_json = tmp_path / "out.json"
     result = _run_cli([str(xlsx), "-o", str(out_json), "--pdf", "--image"])
@@ -301,6 +311,8 @@ def test_CLIでpdfと画像が出力される(tmp_path: Path) -> None:
 
 
 def test_CLIで無効ファイルは安全終了する(tmp_path: Path) -> None:
+    """Test that the CLI exits safely for missing files."""
+
     bad_path = tmp_path / "nope.xlsx"
     out_json = tmp_path / "out.json"
     result = _run_cli([str(bad_path), "-o", str(out_json)])
@@ -310,6 +322,8 @@ def test_CLIで無効ファイルは安全終了する(tmp_path: Path) -> None:
 
 
 def test_CLI_print_areas_dir_outputs_files(tmp_path: Path) -> None:
+    """Verify that c l i print areas dir outputs files."""
+
     xlsx = _prepare_print_area_excel(tmp_path)
     areas_dir = tmp_path / "areas"
     result = _run_cli(
@@ -324,6 +338,8 @@ def test_CLI_print_areas_dir_outputs_files(tmp_path: Path) -> None:
 
 
 def test_cli_libreoffice_rejects_pdf_and_image(tmp_path: Path) -> None:
+    """Verify that the CLI LibreOffice rejects PDF and image."""
+
     xlsx = _prepare_sample_excel(tmp_path)
     result = _run_cli([str(xlsx), "--mode", "libreoffice", "--pdf", "--image"])
 
@@ -335,6 +351,8 @@ def test_cli_libreoffice_rejects_pdf_and_image(tmp_path: Path) -> None:
 def test_cli_libreoffice_rejects_auto_page_breaks_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify that the CLI LibreOffice rejects auto page breaks dir."""
+
     xlsx = _prepare_sample_excel(tmp_path)
     auto_dir = tmp_path / "auto"
     monkeypatch.setattr(
@@ -360,6 +378,8 @@ def test_cli_libreoffice_rejects_auto_page_breaks_dir(
 def test_cli_libreoffice_rejects_rendering_and_auto_page_breaks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify that the CLI LibreOffice rejects rendering and auto page breaks."""
+
     xlsx = _prepare_sample_excel(tmp_path)
     auto_dir = tmp_path / "auto"
     monkeypatch.setattr(

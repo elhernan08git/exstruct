@@ -1,3 +1,5 @@
+"""Pydantic models for structured workbook output."""
+
 from __future__ import annotations
 
 from collections.abc import Generator
@@ -225,6 +227,8 @@ class SheetData(BaseModel):
     )
 
     def _as_payload(self) -> dict[str, object]:
+        """Return a serialized sheet payload with empty values removed."""
+
         from ..io import dict_without_empty_values
 
         return dict_without_empty_values(
@@ -375,6 +379,8 @@ class PrintAreaView(BaseModel):
     )
 
     def _as_payload(self) -> dict[str, object]:
+        """Return a serialized print-area payload with empty values removed."""
+
         from ..io import dict_without_empty_values
 
         return dict_without_empty_values(
