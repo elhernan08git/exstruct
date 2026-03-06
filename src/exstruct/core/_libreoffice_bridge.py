@@ -6,7 +6,6 @@ from pathlib import Path
 import time
 from typing import Protocol, cast
 
-from com.sun.star.beans import PropertyValue
 import uno
 
 _HMM_PER_POINT = 2540.0 / 72.0
@@ -32,7 +31,7 @@ class _Desktop(Protocol):
         url: str,
         target: str,
         search_flags: int,
-        properties: tuple[PropertyValue, ...],
+        properties: tuple[object, ...],
     ) -> object: ...
 
 
@@ -122,7 +121,9 @@ def _resolve_context(host: str, port: int) -> _UnoContext:
 
 
 def _load_document(desktop: _Desktop, file_path: Path) -> _SpreadsheetDocument:
-    props: list[PropertyValue] = []
+    from com.sun.star.beans import PropertyValue
+
+    props: list[object] = []
     for name, value in (("Hidden", True), ("ReadOnly", True)):
         prop = PropertyValue()
         prop.Name = name
