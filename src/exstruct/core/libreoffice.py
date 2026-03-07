@@ -10,12 +10,14 @@ from pathlib import Path
 import shutil
 import socket
 import subprocess
+import sys
 from tempfile import mkdtemp
 import time
 from typing import Literal
 
 _DEFAULT_STARTUP_TIMEOUT_SEC = 15.0
 _DEFAULT_EXEC_TIMEOUT_SEC = 30.0
+_DEFAULT_PYTHON_PROBE_TIMEOUT_SEC = 5.0
 
 
 class LibreOfficeUnavailableError(RuntimeError):
@@ -105,7 +107,7 @@ class LibreOfficeSession:
             The initialized session instance.
 
         Raises:
-            LibreOfficeUnavailableError: If the runtime executable, bundled Python, version probe, or UNO socket startup is unavailable.
+            LibreOfficeUnavailableError: If the runtime executable, compatible Python runtime, version probe, or UNO socket startup is unavailable.
         """
 
         if not self.config.soffice_path.exists():
@@ -114,7 +116,7 @@ class LibreOfficeSession:
             )
         if self._python_path is None or not self._python_path.exists():
             raise LibreOfficeUnavailableError(
-                "LibreOffice runtime is unavailable: bundled python was not found."
+                "LibreOffice runtime is unavailable: compatible Python runtime was not found."
             )
         profile_root = self.config.profile_root
         if profile_root is not None:
@@ -241,7 +243,7 @@ class LibreOfficeSession:
             Decoded JSON payload returned by the bridge script.
 
         Raises:
-            LibreOfficeUnavailableError: If the bundled Python or bridge invocation is unavailable or times out.
+            LibreOfficeUnavailableError: If the compatible Python runtime or bridge invocation is unavailable or times out.
             RuntimeError: If the bridge fails or returns invalid JSON.
         """
 
@@ -276,7 +278,7 @@ class LibreOfficeSession:
             )
         except FileNotFoundError as exc:
             raise LibreOfficeUnavailableError(
-                "LibreOffice runtime is unavailable: bundled python could not be executed."
+                "LibreOffice runtime is unavailable: compatible Python runtime could not be executed."
             ) from exc
         except subprocess.TimeoutExpired as exc:
             raise LibreOfficeUnavailableError(
@@ -332,17 +334,78 @@ def _get_optional_path(name: str) -> Path | None:
 
 
 def _resolve_python_path(soffice_path: Path) -> Path | None:
-    """Resolve the LibreOffice-bundled Python executable path."""
+    """Resolve a Python executable capable of running the LibreOffice bridge."""
 
     override = os.getenv("EXSTRUCT_LIBREOFFICE_PYTHON_PATH")
     if override:
         return Path(override)
-    program_dir = soffice_path.parent
-    for candidate in ("python.exe", "python.bin", "python"):
-        path = program_dir / candidate
-        if path.exists():
-            return path
+    for program_dir in _soffice_program_dirs(soffice_path):
+        for candidate in ("python.exe", "python.bin", "python"):
+            path = program_dir / candidate
+            if path.exists():
+                return path
+    for python_candidate in _system_python_candidates():
+        if _python_supports_libreoffice_bridge(python_candidate):
+            return python_candidate
     return None
+
+
+def _soffice_program_dirs(soffice_path: Path) -> tuple[Path, ...]:
+    """Return candidate LibreOffice program directories for the given ``soffice`` path."""
+
+    program_dirs = [soffice_path.parent]
+    try:
+        resolved_parent = soffice_path.resolve(strict=False).parent
+    except OSError:
+        return tuple(program_dirs)
+    if resolved_parent not in program_dirs:
+        program_dirs.append(resolved_parent)
+    return tuple(program_dirs)
+
+
+def _system_python_candidates() -> tuple[Path, ...]:
+    """Return candidate system Python executables for Debian/Ubuntu-style setups."""
+
+    candidates: list[Path] = []
+    for raw_candidate in (
+        sys.executable,
+        shutil.which("python3"),
+        shutil.which("python"),
+    ):
+        if not raw_candidate:
+            continue
+        path = Path(raw_candidate)
+        if path not in candidates:
+            candidates.append(path)
+    for path in (Path("/usr/bin/python3"), Path("/usr/bin/python")):
+        if path not in candidates:
+            candidates.append(path)
+    return tuple(candidates)
+
+
+def _python_supports_libreoffice_bridge(python_path: Path) -> bool:
+    """Return True when the candidate Python can import required UNO modules."""
+
+    if not python_path.exists():
+        return False
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    try:
+        subprocess.run(
+            [
+                str(python_path),
+                "-c",
+                "import uno\nfrom com.sun.star.beans import PropertyValue\n",
+            ],
+            capture_output=True,
+            check=True,
+            text=True,
+            timeout=_DEFAULT_PYTHON_PROBE_TIMEOUT_SEC,
+            env=env,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return False
+    return True
 
 
 def _reserve_tcp_port() -> int:

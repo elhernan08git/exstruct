@@ -203,6 +203,7 @@ class LibreOfficeSession:
 設定元環境変数:
 
 - `EXSTRUCT_LIBREOFFICE_PATH`
+- `EXSTRUCT_LIBREOFFICE_PYTHON_PATH`
 - `EXSTRUCT_LIBREOFFICE_STARTUP_TIMEOUT_SEC`
 - `EXSTRUCT_LIBREOFFICE_EXEC_TIMEOUT_SEC`
 - `EXSTRUCT_LIBREOFFICE_PROFILE_ROOT`
@@ -361,3 +362,46 @@ pairing ルールは次のとおり。
 - `soffice` と `uno` は optional dependency / 実行環境依存機能として扱う
 - v1 では LibreOffice rendering は追加しないため、既存 `render` extra と切り離す
 - 既存 sample を優先して回帰テストを作り、新規 fixture 追加は必要最小限にする
+
+## 2026-03-07 LibreOffice bridge compatibility probe follow-up
+
+### Issue
+
+- system Python 自動検出が `import uno` と `PropertyValue` import の成功だけで候補を採用しており、bundled bridge script を実行できない Python 3.8 / 3.9 系も false positive として通してしまう。
+- Debian 11 / Ubuntu 20.04 / その WSL で `python3-uno` が入っている場合、`mode="libreoffice"` は rich extraction 開始後に `_libreoffice_bridge.py` subprocess が `SyntaxError` で落ち、通常 fallback に戻ってしまう。
+
+### Goal
+
+- LibreOffice 用 Python 候補の互換性判定を「UNO import 可能」ではなく「bundled bridge をそのまま実行可能」まで引き上げる。
+- 自動検出でも明示 override でも、bridge 非互換な Python は extraction 実行前に fail fast させる。
+
+### Runtime contract
+
+- LibreOffice bridge 用 Python 候補が「互換」と見なされる条件は次のすべてを満たすこと。
+  - 実行ファイルが存在し、起動できる。
+  - `uno` と `com.sun.star.beans.PropertyValue` を import できる。
+  - `src/exstruct/core/_libreoffice_bridge.py` を専用 probe モードで実行し、timeout 内に exit code 0 で終了できる。
+- `_resolve_python_path(...)` は、自動検出した system Python 候補のうち上記条件を満たすものだけを返す。
+- `EXSTRUCT_LIBREOFFICE_PYTHON_PATH` を指定した場合も、session 使用前に同じ probe を通す。非互換 override は rich extraction 実行中の遅延 `SyntaxError` ではなく、明確な runtime unavailable / incompatible error で失敗させる。
+- 互換性判定は hard-coded な Python version 比較ではなく、bridge 実行 probe を唯一の真実とする。これにより、bridge 側の将来の構文・依存変更も probe で検知できる。
+
+### Bridge probe contract
+
+- `_libreoffice_bridge.py` に internal 用の `--probe` を追加する。
+- `--probe` 実行時の bridge は以下を保証する。
+  - module import と引数解析だけを通し、成功時は exit code 0 を返す。
+  - `--host` / `--port` / `--file` を要求しない。
+  - UNO socket 解決、document load、workbook access は行わない。
+- runtime helper 側の probe はこの `--probe` を使う。`--help` や version string など副作用のある暗黙挙動には依存しない。
+
+### Error handling
+
+- probe 失敗条件は `OSError`、timeout、non-zero exit、bridge parse/runtime failure を含む。
+- 自動検出候補がすべて probe 失敗した場合は、既存どおり「compatible Python runtime was not found」系の unavailable error に畳み込む。
+- 明示 override が probe 失敗した場合は、設定済み Python path が bundled bridge と互換でないことが分かる文言にする。
+
+### Verification
+
+- bridge probe 成功時だけ system Python fallback が採用される unit test を追加する。
+- `uno` import は通るが bridge probe が `SyntaxError` で失敗する候補を拒否する regression test を追加する。
+- `EXSTRUCT_LIBREOFFICE_PYTHON_PATH` 指定時も probe failure を fail-fast で surfacing する test を追加する。

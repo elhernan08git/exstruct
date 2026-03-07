@@ -18,6 +18,7 @@ from exstruct.core.libreoffice import (
     LibreOfficeSession,
     LibreOfficeSessionConfig,
     LibreOfficeUnavailableError,
+    _resolve_python_path,
 )
 from exstruct.core.ooxml_drawing import (
     DrawingConnectorRef,
@@ -438,6 +439,92 @@ def test_libreoffice_session_cleans_temp_profile_on_enter_failure(
 
     assert removed_paths == [created_dir]
     assert session._temp_profile_dir is None
+
+
+def test_resolve_python_path_prefers_override(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """Verify that an explicit Python override wins over auto-detection."""
+
+    override_path = tmp_path / "custom-python"
+    override_path.write_text("", encoding="utf-8")
+    monkeypatch.setenv("EXSTRUCT_LIBREOFFICE_PYTHON_PATH", str(override_path))
+
+    assert _resolve_python_path(tmp_path / "soffice") == override_path
+
+
+def test_resolve_python_path_checks_resolved_soffice_dir(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """Verify that bundled Python lookup follows the real soffice program directory."""
+
+    real_program_dir = tmp_path / "real-program"
+    real_program_dir.mkdir()
+    real_soffice = real_program_dir / "soffice"
+    real_soffice.write_text("", encoding="utf-8")
+    real_python = real_program_dir / "python.bin"
+    real_python.write_text("", encoding="utf-8")
+
+    soffice_path = tmp_path / "bin" / "soffice"
+    soffice_path.parent.mkdir(parents=True)
+    soffice_path.write_text("", encoding="utf-8")
+
+    original_resolve = Path.resolve
+
+    def _fake_resolve(self: Path, *, strict: bool = False) -> Path:
+        if self == soffice_path:
+            return real_soffice
+        return original_resolve(self, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", _fake_resolve)
+
+    assert _resolve_python_path(soffice_path) == real_python
+
+
+def test_resolve_python_path_falls_back_to_system_python(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """Verify that Debian/Ubuntu-style system Python fallback is supported."""
+
+    soffice_path = tmp_path / "soffice"
+    soffice_path.write_text("", encoding="utf-8")
+    venv_python = tmp_path / "venv-python"
+    venv_python.write_text("", encoding="utf-8")
+    system_python = tmp_path / "system-python"
+    system_python.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "exstruct.core.libreoffice._system_python_candidates",
+        lambda: (venv_python, system_python),
+    )
+    monkeypatch.setattr(
+        "exstruct.core.libreoffice._python_supports_libreoffice_bridge",
+        lambda path: path == system_python,
+    )
+
+    assert _resolve_python_path(soffice_path) == system_python
+
+
+def test_resolve_python_path_returns_none_without_compatible_python(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """Verify that auto-detection rejects Python candidates without UNO support."""
+
+    soffice_path = tmp_path / "soffice"
+    soffice_path.write_text("", encoding="utf-8")
+    candidate = tmp_path / "python3"
+    candidate.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "exstruct.core.libreoffice._system_python_candidates",
+        lambda: (candidate,),
+    )
+    monkeypatch.setattr(
+        "exstruct.core.libreoffice._python_supports_libreoffice_bridge",
+        lambda _path: False,
+    )
+
+    assert _resolve_python_path(soffice_path) is None
 
 
 def test_libreoffice_session_exit_cleans_profile_even_if_kill_wait_times_out(

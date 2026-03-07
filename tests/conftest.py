@@ -7,9 +7,9 @@ import importlib.util
 import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import sys
+from types import ModuleType
 
 import pytest
 
@@ -76,32 +76,44 @@ def _has_pillow() -> bool:
 @lru_cache(maxsize=1)
 def _has_libreoffice_runtime() -> bool:
     """Return True if a runnable LibreOffice executable is available."""
+    libreoffice_module = _load_libreoffice_runtime_module()
     raw_path = os.getenv("EXSTRUCT_LIBREOFFICE_PATH")
-    candidates = [raw_path] if raw_path else ["soffice", "soffice.exe"]
-    for candidate in candidates:
-        if not candidate:
-            continue
-        resolved = candidate
-        if raw_path:
-            if not Path(candidate).exists():
-                continue
-        else:
-            which = shutil.which(candidate)
-            if which is None:
-                continue
-            resolved = which
-        try:
-            subprocess.run(
-                [resolved, "--version"],
-                capture_output=True,
-                check=True,
-                text=True,
-                timeout=5.0,
-            )
-        except Exception:
-            continue
-        return True
-    return False
+    which_soffice = libreoffice_module._which_soffice
+    resolve_python_path = libreoffice_module._resolve_python_path
+    soffice_path = Path(raw_path) if raw_path else which_soffice()
+    if not isinstance(soffice_path, Path) or not soffice_path.exists():
+        return False
+    python_path = resolve_python_path(soffice_path)
+    if not isinstance(python_path, Path) or not python_path.exists():
+        return False
+    try:
+        subprocess.run(
+            [str(soffice_path), "--version"],
+            capture_output=True,
+            check=True,
+            text=True,
+            timeout=5.0,
+        )
+    except Exception:
+        return False
+    return True
+
+
+@lru_cache(maxsize=1)
+def _load_libreoffice_runtime_module() -> ModuleType:
+    """Load the LibreOffice runtime helper without importing the full package."""
+
+    module_path = (
+        Path(__file__).resolve().parents[1] / "src/exstruct/core/libreoffice.py"
+    )
+    module_name = "tests._libreoffice_runtime_probe"
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Failed to load LibreOffice runtime helper.")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _com_skip_reason() -> str | None:
