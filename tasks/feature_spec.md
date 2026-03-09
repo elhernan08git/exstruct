@@ -677,3 +677,51 @@ pairing ルールは次のとおり。
 ### Documentation
 
 - README / README.ja / test requirements / task log に、Linux required smoke job の存在と実行条件を記載する。
+
+## 2026-03-09 PR #76 additional review triage
+
+### Accepted follow-up
+
+#### LibreOffice smoke test should avoid backend-constant coupling
+
+- `tests/core/test_libreoffice_smoke.py` は LibreOffice mode の end-to-end smoke を固定し、backend 実装定数そのものは固定しない。
+- smoke では `chart.confidence == 0.8` のような exact 値比較を行わない。
+- smoke は次を保証すればよい。
+  - chart が返る
+  - title / series / geometry が埋まる
+  - `confidence` は `0.0 <= confidence <= 1.0` の範囲にある
+- exact な `0.5 / 0.8` の confidence contract は、既存どおり backend 単体 test 側で担保する。
+
+#### LibreOffice backend must not pay an extra probe-only session startup
+
+- `LibreOfficeRichBackend.extract_shapes()` / `extract_charts()` は、実データ取得前に probe 専用の LibreOffice session を起動しない。
+- runtime availability の確認は、`_read_draw_page_shapes()` または `_read_chart_geometries()` の実読みによって兼ねる。
+- backend は probe-only `_runtime_checked` boolean に依存せず、実際に取得した cache の有無と各 read の成功/失敗で状態を表す。
+- pipeline の `extract_shapes() -> extract_charts()` 経路では、LibreOffice session startup は最大 2 回までに抑える。
+- ただし、shapes と charts の read は引き続き分離し、chart extraction failure 後も shape 成功結果を保持できる partial-success contract を壊さない。
+- review comment の「二回目 failure が `_runtime_checked=True` で隠れる」は採用しない。read failure は従来どおり surfacing させる。
+
+#### Test docstrings should remain grammatical and searchable
+
+- `tests/core/test_mode_output.py` と `tests/cli/test_cli.py` の docstring は、意味の通る英文に揃える。
+- `c l i` のような分割綴りは使わず `CLI` に統一する。
+- 出力先や stdout 既定値を表す docstring は、対象関数名と期待結果が読める表現にする。
+
+#### PR #76 should keep AGENTS.md changes scoped
+
+- PR #76 は LibreOffice mode rollout を主題とするため、`AGENTS.md` の大規模な方針削除を同じ PR に混在させない。
+- 現在の branch で削除された `AGENTS.md` の旧 section 2/3/4 は、この PR では restore する方針を優先する。
+- もし `AGENTS.md` の整理自体を継続したい場合は、LibreOffice 変更とは分離した別 PR で扱う。
+
+### Non-adopted review points
+
+#### GitHub Actions package-manager consistency note
+
+- `.github/workflows/pytest.yml` の `libreoffice-linux-smoke` は既存 `test` job と同じ `pip install -e .[...]` パターンを踏襲しており、新 job だけが不整合を持ち込んだわけではない。
+- `defusedxml` 未導入という指摘は採用しない。core dependency なので editable install で導入される。
+- `pytest-cov` 未使用は事実だが、動作不良ではなく cleanup レベルの論点として別件に留める。
+
+#### MkDocs README navigation removal note
+
+- `mkdocs.yml` / `docs/index.md` / `docs/README.en.md` / `docs/README.ja.md` の変更は docs build broken ではない。nav 参照と対象 file 削除が同期しているためである。
+- この thread は機能バグとしては採用せず、必要なら「docs 導線再編をこの PR に残すか、別 PR に分離するか」の説明で解く。

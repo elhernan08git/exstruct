@@ -428,3 +428,42 @@
   - `python -c "import yaml; yaml.safe_load(open('.github/workflows/pytest.yml', encoding='utf-8'))"` 相当の YAML parse -> `yaml-ok`
   - `uv run pytest tests/test_conftest_libreoffice_runtime.py -q` -> `1 passed`
   - `uv run task precommit-run` -> `ruff / ruff-format / mypy passed`
+
+## 2026-03-09 PR #76 additional review triage
+
+### Planning
+
+- [x] `gh` で PR #76 の最新 review thread を再取得し、未 resolve 指摘を一覧化する
+- [x] 各指摘を `feat/libreoffice-mode` の現行コードと `main...HEAD` 差分に照らして妥当性判定する
+- [x] 採用する follow-up / 採用しない指摘を `tasks/feature_spec.md` に反映する
+- [ ] `tests/core/test_libreoffice_smoke.py` の confidence assertion を smoke 向けの高レベル検証へ緩める
+- [ ] `src/exstruct/core/backends/libreoffice_backend.py` の probe-only `_ensure_runtime()` を整理し、partial-success contract を維持したまま redundant session startup を削減する
+- [ ] `tests/core/test_mode_output.py` / `tests/cli/test_cli.py` の不自然な docstring を修正する
+- [ ] `AGENTS.md` の scope 外削除をこの PR から外す
+- [ ] 対象 pytest と `uv run task precommit-run` を実行して follow-up を検証する
+
+### Review
+
+- `gh api graphql` で PR #76 の未 resolve review thread は 7 件を確認した
+- 対応採用とした指摘
+  - `tests/core/test_libreoffice_smoke.py:39`
+    - `chart.confidence == 0.8` は smoke としては backend 実装定数への結合が強い
+    - exact `0.8` は `tests/core/test_libreoffice_backend.py` の unit test に残し、smoke は range/assertion へ寄せる
+  - `src/exstruct/core/backends/libreoffice_backend.py:149-185`
+    - `_ensure_runtime()` は probe 専用 session を 1 回余分に起動しており、通常の shapes+charts 経路で合計 3 回 startup になる
+    - ただし「`_runtime_checked=True` で二回目 failure が隠れる」というレビュー本文の後半は不正確で、実読込 failure は別 session で surfacing される
+    - follow-up では redundant probe だけを除去し、shape success 後の chart failure を保持する契約は維持する
+  - `tests/core/test_mode_output.py:344,360`
+    - `process excel sheets dir output` は不自然
+    - `c l i` は typo
+  - `tests/cli/test_cli.py:344`
+    - `c l i` は typo
+  - `AGENTS.md:49`
+    - LibreOffice rollout と無関係な section 2/3/4 の大規模削除であり、PR scope 指摘は妥当
+- 今回は実装対象に含めない指摘
+  - `.github/workflows/pytest.yml:75`
+    - `defusedxml` 未導入という指摘は誤り。`pyproject.toml` の core dependency なので `pip install -e .[...]` で導入される
+    - `pip` / `uv` の統一と `pytest-cov` cleanup は maintenance 論点であり、この PR の blocking issue とは見なさない
+  - `mkdocs.yml:50`
+    - README nav 削除と `docs/README.*` 削除は docs build broken ではない
+    - 論点は docs 導線再編の説明不足 / PR scope であり、必要なら review comment で意図を補足して resolve する
