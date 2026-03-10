@@ -111,7 +111,8 @@ jobs:
             'python-core-*\bin\python'
           )
           foreach ($pattern in $patterns) {
-            $candidate = Get-ChildItem -Path (Join-Path $programDir $pattern) -File -ErrorAction SilentlyContinue | Select-Object -First 1
+            $searchPath = "$programDir\$pattern"
+            $candidate = Get-ChildItem -Path $searchPath -File -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($null -ne $candidate) {
               "EXSTRUCT_LIBREOFFICE_PYTHON_PATH=$($candidate.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
               Write-Host "Discovered LibreOffice Python: $($candidate.FullName)"
