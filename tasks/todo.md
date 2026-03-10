@@ -693,3 +693,23 @@
   - `python3 -m pytest tests/core/test_libreoffice_backend.py -q` -> `48 passed`
   - `python3 -m pytest tests/test_conftest_libreoffice_runtime.py -q` -> `3 passed`
   - `python3 -m pre_commit run -a` -> `ruff / ruff-format / mypy passed`
+
+## 2026-03-10 Windows LibreOffice CI failure second follow-up
+
+### Planning
+
+- [x] 最新の failing workflow run / job / logs を確認し、まだ残っている failure point を特定する
+- [x] runtime gate と bridge probe の実装差分を確認し、Windows hosted runner で不足している条件を見つける
+- [x] probe subprocess に必要な最小 env だけを forward するよう修正する
+- [x] 関連 regression test を更新し、targeted pytest と pre-commit を再実行する
+
+### Review
+
+- 最新 run `22905085870` でも failure は `libreoffice-windows-smoke` の setup error で、`soffice.exe --version` 成功後に `tests/conftest.py::_has_libreoffice_runtime()` が `False` になっていた
+- `_run_bridge_probe_subprocess(...)` だけが `_build_subprocess_env(...)` を使っておらず、Windows hosted runner の LibreOffice Python / UNO probe に必要な runtime env を欠く可能性があった
+- `src/exstruct/core/libreoffice.py` で probe subprocess にも allowlisted env + `PYTHONIOENCODING=utf-8` を渡すようにし、bridge handshake / extraction と整合させた
+- `tests/core/test_libreoffice_backend.py` の probe subprocess test を、env を forward しつつ allowlist 外 env を漏らさない契約に更新した
+- 検証:
+  - `python3 -m pytest tests/core/test_libreoffice_backend.py -q` -> `48 passed`
+  - `python3 -m pytest tests/test_conftest_libreoffice_runtime.py -q` -> `3 passed`
+  - `python3 -m pre_commit run -a` -> `ruff / ruff-format / mypy passed`

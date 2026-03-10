@@ -846,6 +846,24 @@ pairing ルールは次のとおり。
 - `tests/core/test_libreoffice_backend.py` に `python-core-*` 配下の `python.exe` が auto-detection で選ばれる regression test を追加する。
 - `tests/test_conftest_libreoffice_runtime.py` と `python -m pre_commit run -a` を通し、runtime gate と型/lint を再確認する。
 
+## 2026-03-10 Windows LibreOffice probe env follow-up
+
+### Issue
+
+- 最新の `libreoffice-windows-smoke` でも `tests/conftest.py::_has_libreoffice_runtime()` が `False` となり、`FORCE_LIBREOFFICE_SMOKE=1` により setup で fail-fast した。
+- `resolve_python_path(...)` の互換性判定で使う bridge probe だけが allowlisted subprocess env を渡しておらず、Windows hosted runner の LibreOffice Python / UNO import に必要な runtime env を欠く可能性があった。
+
+### Contract
+
+- `_run_bridge_probe_subprocess(...)` も bridge handshake / extraction と同様に `_build_subprocess_env(...)` を使う。
+- probe に渡す env は既存 allowlist に限定し、秘密値や無関係な env は forward しない。
+- probe の argv contract (`python -X utf8 _libreoffice_bridge.py --probe`) は維持する。
+
+### Verification
+
+- `tests/core/test_libreoffice_backend.py` の probe subprocess regression test を、allowlisted env を forward する契約へ更新する。
+- `tests/test_conftest_libreoffice_runtime.py` と `python -m pre_commit run -a` を再実行する。
+
 ## 2026-03-09 PR #76 latest review + Codacy re-triage
 
 ### Review-thread cleanup

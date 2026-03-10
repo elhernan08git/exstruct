@@ -2110,14 +2110,17 @@ def test_python_supports_libreoffice_bridge_uses_probe_command(
     assert calls[0][4] == "--probe"
 
 
-def test_run_bridge_probe_subprocess_uses_fixed_utf8_args_without_env(
+def test_run_bridge_probe_subprocess_uses_fixed_utf8_args_with_allowlisted_env(
     tmp_path: Path, monkeypatch: MonkeyPatch
 ) -> None:
-    """Verify that probe subprocesses avoid inherited env and force UTF-8 via argv."""
+    """Verify that probe subprocesses pass only the allowlisted env plus UTF-8."""
 
     python_path = tmp_path / "python3"
     python_path.write_text("", encoding="utf-8")
     captured: dict[str, object] = {}
+    monkeypatch.setenv("PATH", "/tmp/path-entry")
+    monkeypatch.setenv("SYSTEMROOT", "/tmp/system-root")
+    monkeypatch.setenv("SECRET_TOKEN", "should-not-leak")
 
     def _fake_run(
         args: list[str], **kwargs: object
@@ -2141,7 +2144,11 @@ def test_run_bridge_probe_subprocess_uses_fixed_utf8_args_without_env(
     assert args[2] == "utf8"
     assert args[3].endswith("_libreoffice_bridge.py")
     assert args[4] == "--probe"
-    assert "env" not in kwargs
+    env = cast(dict[str, str], kwargs["env"])
+    assert env["PATH"] == "/tmp/path-entry"
+    assert env["SYSTEMROOT"] == "/tmp/system-root"
+    assert env["PYTHONIOENCODING"] == "utf-8"
+    assert "SECRET_TOKEN" not in env
     assert kwargs["encoding"] == "utf-8"
     assert kwargs["timeout"] == 1.25
 

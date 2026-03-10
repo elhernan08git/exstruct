@@ -868,10 +868,11 @@ def _run_bridge_probe_subprocess(
     """Run the bundled LibreOffice bridge in `--probe` mode."""
 
     bridge_path = Path(__file__).with_name("_libreoffice_bridge.py")
+    env = _build_subprocess_env(pythonioencoding="utf-8")
     # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
     # Safe by construction: validated Python executable + bundled local script +
-    # fixed probe flag under shell=False. Probe mode uses a fixed UTF-8 runtime
-    # option and does not forward an inherited environment.
+    # fixed probe flag under shell=False. Probe mode forwards only the shared
+    # allowlisted environment needed for runtime-linked UNO imports.
     return subprocess.run(  # nosec B603  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         [
             _subprocess_executable_arg(python_path),
@@ -885,6 +886,7 @@ def _run_bridge_probe_subprocess(
         text=True,
         encoding="utf-8",
         timeout=timeout_sec,
+        env=env,
     )
 
 
