@@ -734,3 +734,24 @@
   - `python3 - <<'PY' ... yaml.safe_load('.github/workflows/pytest.yml') ...` -> `yaml-ok`
   - `python3 -m pytest tests/test_conftest_libreoffice_runtime.py -q` -> `3 passed`
   - `python3 -m pre_commit run -a` -> `ruff / ruff-format / mypy passed`
+
+## 2026-03-10 Windows LibreOffice CI failure fourth follow-up
+
+### Planning
+
+- [x] 最新の `libreoffice-windows-smoke` log を再確認し、workflow discovery 後も runtime gate で落ちていることを確認する
+- [x] discovered `EXSTRUCT_LIBREOFFICE_PYTHON_PATH` が pytest step に届いていることを確認し、残差分が bridge probe subprocess 条件にあると切り分ける
+- [x] bridge subprocess を bundled Python parent directory を `cwd` にして起動する最小コード修正を入れる
+- [x] focused tests と validation を実行し、結果を記録する
+
+### Review
+
+- 最新 run `22906728072` では `Discover LibreOffice bundled Python` が成功し、`EXSTRUCT_LIBREOFFICE_PYTHON_PATH=C:\\Program Files\\LibreOffice\\program\\python.exe` が pytest step に渡っていた
+- それでも `tests/conftest.py::_has_libreoffice_runtime()` が `False` になっていたため、残障害は path discovery ではなく bridge probe subprocess 側だと切り分けた
+- `src/exstruct/core/_libreoffice_bridge.py` は module import 時点で `uno` を import するため、Windows bundled Python は probe / handshake / extraction すべてで LibreOffice program directory を working directory として持つ必要がある
+- `src/exstruct/core/libreoffice.py` に `_bridge_subprocess_cwd(...)` を追加し、bridge subprocess 3系統 (`--probe`, `--handshake`, extraction) で `cwd=_validated_runtime_path(python_path).parent` を使うようにした
+- `tests/core/test_libreoffice_backend.py` の focused test を更新し、probe / handshake / extraction が同じ `cwd` contract を使うことを検証した
+- 検証:
+  - `python3 -m pytest tests/core/test_libreoffice_backend.py -q` -> `48 passed`
+  - `python3 -m pytest tests/test_conftest_libreoffice_runtime.py -q` -> `3 passed`
+  - `python3 -m pre_commit run -a` -> `ruff / ruff-format / mypy passed`

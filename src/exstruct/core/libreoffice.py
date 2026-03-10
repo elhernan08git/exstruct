@@ -827,6 +827,12 @@ def _subprocess_path_arg(path: Path) -> str:
     return str(path.resolve(strict=False))
 
 
+def _bridge_subprocess_cwd(python_path: Path) -> Path:
+    """Return the working directory used for LibreOffice bridge subprocesses."""
+
+    return _validated_runtime_path(python_path).parent
+
+
 def _build_subprocess_env(*, pythonioencoding: str | None = None) -> dict[str, str]:
     """Return a minimal inherited environment for bridge-related subprocesses."""
 
@@ -887,6 +893,7 @@ def _run_bridge_probe_subprocess(
         encoding="utf-8",
         timeout=timeout_sec,
         env=env,
+        cwd=_bridge_subprocess_cwd(python_path),
     )
 
 
@@ -927,6 +934,7 @@ def _run_bridge_extract_subprocess(
         encoding="utf-8",
         timeout=timeout_sec,
         env=env,
+        cwd=_bridge_subprocess_cwd(python_path),
     )
 
 
@@ -963,6 +971,7 @@ def _run_bridge_handshake_subprocess(
         encoding="utf-8",
         timeout=timeout_sec,
         env=env,
+        cwd=_bridge_subprocess_cwd(python_path),
     )
 
 

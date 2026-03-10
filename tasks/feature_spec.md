@@ -882,6 +882,25 @@ pairing ルールは次のとおり。
 - `.github/workflows/pytest.yml` が YAML として parse できることを確認する。
 - Windows verify step で `EXSTRUCT_LIBREOFFICE_PYTHON_PATH` の存在確認を行う。
 
+## 2026-03-10 Windows LibreOffice bridge cwd follow-up
+
+### Issue
+
+- Windows smoke workflow で bundled `python.exe` の path discovery 自体は成功したが、`tests/conftest.py::_has_libreoffice_runtime()` は引き続き bridge probe を incompatible 扱いした。
+- `_libreoffice_bridge.py` は module import 時点で `uno` を import するため、Windows の LibreOffice bundled Python は subprocess 実行時にも LibreOffice program directory を working directory として持つ必要がある。
+
+### Contract
+
+- LibreOffice bridge subprocess (`--probe`, `--handshake`, extraction) は `python_path` の親ディレクトリを `cwd` にして起動する。
+- この `cwd` contract は allowlisted env と併用し、Windows bundled Python でも Linux system Python fallback でも同じ subprocess API で扱う。
+- focused unit tests は probe / handshake / extraction subprocess が同じ `cwd` contract を使うことを検証する。
+
+### Verification
+
+- `uv run pytest tests/core/test_libreoffice_backend.py -q`
+- `uv run pytest tests/test_conftest_libreoffice_runtime.py -q`
+- `uv run task precommit-run`
+
 ## 2026-03-09 PR #76 latest review + Codacy re-triage
 
 ### Review-thread cleanup
