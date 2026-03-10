@@ -755,3 +755,24 @@
   - `python3 -m pytest tests/core/test_libreoffice_backend.py -q` -> `48 passed`
   - `python3 -m pytest tests/test_conftest_libreoffice_runtime.py -q` -> `3 passed`
   - `python3 -m pre_commit run -a` -> `ruff / ruff-format / mypy passed`
+
+## 2026-03-10 PR79 LibreOffice Windows smoke failure investigation
+
+### Planning
+
+- [x] 失敗ログと `tests/conftest.py` の runtime gate を照合し、Windows CI false-negative の経路を特定する
+- [x] `tasks/feature_spec.md` で runtime gate timeout fallback 仕様を明文化する
+- [x] `tests/conftest.py` の LibreOffice 判定を timeout 耐性付きに修正する
+- [x] 回帰テストを追加して timeout fallback 契約を固定する
+- [x] 対象 pytest を実行して挙動を検証する
+
+### Review
+
+- `tests/conftest.py::_has_libreoffice_runtime()` の `soffice --version` probe で `TimeoutExpired` が起きた場合、即 `False` ではなく `LibreOfficeSession.from_env()` の短命セッション probe を 1 回実施するように変更した。
+- fallback session が `LibreOfficeUnavailableError` を返す場合のみ unavailable (`False`) とし、予期しない例外は従来どおり surfacing して fail-fast を維持した。
+- `tests/test_conftest_libreoffice_runtime.py` に timeout fallback の成功/失敗ケース回帰テストを追加し、Windows CI で起きうる初期タイムアウトの false-negative を防ぐ契約を固定した。
+- 検証:
+  - `pytest tests/test_conftest_libreoffice_runtime.py -q` -> `5 passed`
+  - `uv run ruff check tests/conftest.py tests/test_conftest_libreoffice_runtime.py` -> pass
+  - `uv run mypy tests/conftest.py tests/test_conftest_libreoffice_runtime.py` -> pass
+  - `uv run task precommit-run` は pre-commit hook の remote fetch (`astral-sh/ruff-pre-commit`) が `CONNECT tunnel failed, response 403` で失敗（環境制約）

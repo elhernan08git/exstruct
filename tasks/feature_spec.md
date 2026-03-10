@@ -1002,3 +1002,30 @@ pairing ルールは次のとおり。
 
 - `tests/core/test_libreoffice_backend.py` に、`_close_stderr_sink()` が一時的な `PermissionError` を retry 後に解消できる regression test を追加する。
 - 同 test file に、stderr log unlink が lock され続けても `_start_soffice_startup_attempt(...)` が `PermissionError` ではなく startup failure を返す regression test を追加する。
+
+## 2026-03-10 PR79 LibreOffice Windows smoke runtime gate hardening
+
+### Background
+
+- Windows CI (`libreoffice-windows-smoke`) can have transiently slow `soffice --version` startup right after Chocolatey install.
+- `tests/conftest.py::_has_libreoffice_runtime()` currently treats any timeout from the version probe as runtime unavailable, which can create a false negative and trip `FORCE_LIBREOFFICE_SMOKE=1`.
+
+### Spec
+
+- `_has_libreoffice_runtime()` keeps strict checks for:
+  - `soffice` executable path existence
+  - bridge-compatible Python resolution
+- Version probe policy is refined:
+  - On `subprocess.TimeoutExpired` from `soffice --version`, do **not** immediately mark runtime unavailable.
+  - Attempt one fallback runtime viability check by launching `LibreOfficeSession.from_env()` and entering/exiting the session.
+  - If fallback session startup succeeds, treat runtime as available (`True`).
+  - If fallback session startup fails with `LibreOfficeUnavailableError`, treat runtime as unavailable (`False`).
+  - Unexpected exceptions from the fallback remain loud (raise) to avoid masking regressions.
+- Existing behavior for `FileNotFoundError`, `OSError`, and `CalledProcessError` in version probe remains `False`.
+
+### Function contracts
+
+- `_has_libreoffice_runtime() -> bool`
+  - Inputs: none (uses env + runtime helpers)
+  - Output: runtime availability decision with timeout fallback behavior above
+  - Side effect: may create a short-lived `LibreOfficeSession` during timeout fallback path

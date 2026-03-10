@@ -101,14 +101,32 @@ def _has_libreoffice_runtime() -> bool:
             text=True,
             timeout=5.0,
         )
+    except subprocess.TimeoutExpired:
+        return _has_libreoffice_runtime_via_session_probe(
+            libreoffice_module=libreoffice_module,
+            unavailable_error=unavailable_error,
+        )
     except (
         FileNotFoundError,
         OSError,
-        subprocess.TimeoutExpired,
         subprocess.CalledProcessError,
     ):
         return False
     return True
+
+
+def _has_libreoffice_runtime_via_session_probe(
+    *,
+    libreoffice_module: ModuleType,
+    unavailable_error: type[BaseException],
+) -> bool:
+    """Fallback availability probe via a short-lived LibreOffice session."""
+
+    try:
+        with libreoffice_module.LibreOfficeSession.from_env():
+            return True
+    except unavailable_error:
+        return False
 
 
 @lru_cache(maxsize=1)
@@ -200,7 +218,7 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
             pytest.skip(reason)
 
 
-@pytest.fixture(autouse=True)  # type: ignore[misc]
+@pytest.fixture(autouse=True)
 def _skip_com_for_non_com_tests(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
 ) -> None:

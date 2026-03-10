@@ -122,3 +122,112 @@ def test_libreoffice_skip_reason_fails_fast_when_forced(
         conftest._libreoffice_skip_reason()
 
     conftest._has_libreoffice_runtime.cache_clear()
+
+
+def test_has_libreoffice_runtime_timeout_uses_session_fallback_success(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """Verify timeout on version probe can recover via session fallback."""
+
+    module_path = Path(__file__).with_name("conftest.py")
+    spec = importlib.util.spec_from_file_location(
+        "tests_runtime_conftest_timeout_success", module_path
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Failed to load tests/conftest.py")
+    conftest = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(conftest)
+
+    soffice_path = tmp_path / "soffice"
+    soffice_path.write_text("", encoding="utf-8")
+    python_path = tmp_path / "python"
+    python_path.write_text("", encoding="utf-8")
+
+    class _SessionProbe:
+        @classmethod
+        def from_env(cls) -> _SessionProbe:
+            return cls()
+
+        def __enter__(self) -> _SessionProbe:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            _ = exc_type
+            _ = exc
+            _ = tb
+
+    monkeypatch.setattr(
+        conftest,
+        "_load_libreoffice_runtime_module",
+        lambda: SimpleNamespace(
+            LibreOfficeUnavailableError=RuntimeError,
+            LibreOfficeSession=_SessionProbe,
+            _which_soffice=lambda: soffice_path,
+            _resolve_python_path=lambda _path: python_path,
+        ),
+    )
+
+    def _raise_timeout(*args: object, **kwargs: object) -> None:
+        _ = args
+        _ = kwargs
+        raise conftest.subprocess.TimeoutExpired(cmd="soffice --version", timeout=5.0)
+
+    monkeypatch.setattr(conftest.subprocess, "run", _raise_timeout)
+    monkeypatch.delenv("EXSTRUCT_LIBREOFFICE_PATH", raising=False)
+    conftest._has_libreoffice_runtime.cache_clear()
+
+    assert conftest._has_libreoffice_runtime() is True
+
+    conftest._has_libreoffice_runtime.cache_clear()
+
+
+def test_has_libreoffice_runtime_timeout_uses_session_fallback_failure(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """Verify timeout fallback returns False when session startup is unavailable."""
+
+    module_path = Path(__file__).with_name("conftest.py")
+    spec = importlib.util.spec_from_file_location(
+        "tests_runtime_conftest_timeout_failure", module_path
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Failed to load tests/conftest.py")
+    conftest = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(conftest)
+
+    soffice_path = tmp_path / "soffice"
+    soffice_path.write_text("", encoding="utf-8")
+    python_path = tmp_path / "python"
+    python_path.write_text("", encoding="utf-8")
+
+    class ProbeUnavailableError(RuntimeError):
+        """Expected runtime unavailability error for smoke gating."""
+
+    class _SessionProbe:
+        @classmethod
+        def from_env(cls) -> _SessionProbe:
+            raise ProbeUnavailableError("session startup failed")
+
+    monkeypatch.setattr(
+        conftest,
+        "_load_libreoffice_runtime_module",
+        lambda: SimpleNamespace(
+            LibreOfficeUnavailableError=ProbeUnavailableError,
+            LibreOfficeSession=_SessionProbe,
+            _which_soffice=lambda: soffice_path,
+            _resolve_python_path=lambda _path: python_path,
+        ),
+    )
+
+    def _raise_timeout(*args: object, **kwargs: object) -> None:
+        _ = args
+        _ = kwargs
+        raise conftest.subprocess.TimeoutExpired(cmd="soffice --version", timeout=5.0)
+
+    monkeypatch.setattr(conftest.subprocess, "run", _raise_timeout)
+    monkeypatch.delenv("EXSTRUCT_LIBREOFFICE_PATH", raising=False)
+    conftest._has_libreoffice_runtime.cache_clear()
+
+    assert conftest._has_libreoffice_runtime() is False
+
+    conftest._has_libreoffice_runtime.cache_clear()
