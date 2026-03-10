@@ -803,6 +803,30 @@ pairing ルールは次のとおり。
 - 実装後は `uv run pytest tests/core/test_libreoffice_backend.py tests/core/test_libreoffice_bridge.py -q` と `uv run task precommit-run` を通す。
 - push 後に `python scripts/codacy_issues.py --pr 76 --min-level Warning` を再実行し、当該 issue が消えていることを確認する。
 
+## 2026-03-10 Windows LibreOffice CI smoke gate
+
+### Goal
+
+- `mode="libreoffice"` の hosted-runner smoke を Windows でも継続的に検証できるようにする。
+- Linux smoke だけでは拾えない Windows 固有の `soffice.exe` path / process startup / UNO bridge 初期化の問題を CI で早期検出する。
+
+### CI contract
+
+- GitHub Actions に Windows 専用の smoke job `libreoffice-windows-smoke` を追加する。
+- 当該 job は既存の unit matrix や COM test job と分離し、LibreOffice smoke だけを担当する。
+- runner は `windows-2025` に固定する。
+- runtime 準備として `choco install libreoffice-fresh -y --no-progress` を実行する。
+- smoke 実行時は `RUN_LIBREOFFICE_SMOKE=1` と `FORCE_LIBREOFFICE_SMOKE=1` を設定する。
+- ExStruct に `EXSTRUCT_LIBREOFFICE_PATH=C:\Program Files\LibreOffice\program\soffice.exe` を渡す。
+- install 後は `soffice.exe` の存在確認と `--version` 実行で fail-fast し、その後 `tests/core/test_libreoffice_smoke.py -m libreoffice` を skip なしで実行する。
+- Windows smoke は bundled Python の auto-detection をまず検証対象とし、`EXSTRUCT_LIBREOFFICE_PYTHON_PATH` は追加しない。
+
+### Verification target
+
+- Windows hosted runner 上で LibreOffice の起動コマンドが通る。
+- `pytest.mark.libreoffice` smoke が runtime unavailable で skip されず、unavailable/incompatible 時は job failure になる。
+- sample workbook の shape/chart extraction smoke が Windows 上でも green になる。
+
 ## 2026-03-09 PR #76 latest review + Codacy re-triage
 
 ### Review-thread cleanup

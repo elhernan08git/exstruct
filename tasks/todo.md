@@ -649,3 +649,26 @@
   - `uv run task precommit-run` -> `ruff / ruff-format / mypy passed`
   - push 後に 2 分待ってから `python scripts/codacy_issues.py --pr 76 --min-level Warning` を 1 回だけ再実行し、`total: 0` を確認した
   - `gh api graphql` 再確認で PR #76 の review thread は全件 `isResolved: true` になった
+
+## 2026-03-10 Windows LibreOffice CI smoke gate
+
+### Planning
+
+- [x] 既存の Linux LibreOffice smoke job / README / test requirements を確認し、Windows smoke 追加の最小変更方針を決める
+- [x] `.github/workflows/pytest.yml` に Windows 専用 job `libreoffice-windows-smoke` を追加する
+- [x] Windows hosted runner で `choco install libreoffice-fresh`、`RUN_LIBREOFFICE_SMOKE=1`、`FORCE_LIBREOFFICE_SMOKE=1`、`EXSTRUCT_LIBREOFFICE_PATH` を設定する
+- [x] install 後に `soffice.exe` の存在確認と `--version` 実行を入れて fail-fast 化する
+- [x] README / README.ja / `docs/agents/TEST_REQUIREMENTS.md` / `tasks/feature_spec.md` に Windows smoke job の契約を追記する
+- [x] YAML parse と既存 pytest / pre-commit による最終確認を行う
+
+### Review
+
+- `.github/workflows/pytest.yml` に `windows-2025` 固定の `libreoffice-windows-smoke` job を追加した
+- Windows job は Linux smoke と同じく unit matrix から独立させ、LibreOffice smoke だけを担当する構成にした
+- runtime 導入は issue 提案どおり `choco install libreoffice-fresh -y --no-progress` を使い、`EXSTRUCT_LIBREOFFICE_PATH=C:\Program Files\LibreOffice\program\soffice.exe` を明示する
+- install 後に `Test-Path` と `soffice.exe --version` を実行し、runtime 不在/破損を smoke 実行前に fail-fast させる
+- README / 日本語 README / test requirements / feature spec を Windows smoke job 反映に更新した
+- 検証:
+  - `python -c "import yaml; yaml.safe_load(open('.github/workflows/pytest.yml', encoding='utf-8')); print('yaml-ok')"` -> `yaml-ok`
+  - `python -m pytest tests/test_conftest_libreoffice_runtime.py -q` -> `3 passed`
+  - `python -m pre_commit run -a` -> `ruff / ruff-format / mypy passed`
